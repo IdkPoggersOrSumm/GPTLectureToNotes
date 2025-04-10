@@ -1,5 +1,7 @@
 import AVFoundation
 import Combine
+import AppKit
+
 
 extension Notification.Name {
     static let startWaveform = Notification.Name("startWaveform")
@@ -52,7 +54,22 @@ class AudioRecorder: NSObject, ObservableObject {
             self.isTranscribing = false
         }
 
-        let audioFilename = FileManager.default.temporaryDirectory.appendingPathComponent("lecture_recording.m4a")
+        // Create custom directory in Downloads if it doesn't exist
+        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+        let customDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
+        
+        do {
+            try FileManager.default.createDirectory(at: customDir, withIntermediateDirectories: true, attributes: nil)
+        } catch {
+            Logger.shared.log("❌ Failed to create directory: \(error.localizedDescription)")
+        }
+        
+        // Create unique filename with timestamp
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
+        let timestamp = dateFormatter.string(from: Date())
+        let audioFilename = customDir.appendingPathComponent("lecture_\(timestamp).m4a")
+        
         Logger.shared.log("📁 Saving recording to: \(audioFilename.path)")
         
         let settings: [String: Any] = [
@@ -70,29 +87,27 @@ class AudioRecorder: NSObject, ObservableObject {
             audioRecorder?.record()
             
             // Start monitoring audio levels
-            // Start monitoring audio levels
             Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-                        guard let recorder = self.audioRecorder, recorder.isRecording else {
-                            timer.invalidate() // Stop timer if recording stops
-                            return
-                        }
-                        
-                        recorder.updateMeters()
-                        let power = pow(10, recorder.averagePower(forChannel: 0) / 20) // Convert to linear scale
+                guard let recorder = self.audioRecorder, recorder.isRecording else {
+                    timer.invalidate() // Stop timer if recording stops
+                    return
+                }
+                
+                recorder.updateMeters()
+                let power = pow(10, recorder.averagePower(forChannel: 0) / 20) // Convert to linear scale
 
-                        // Boost amplitude by a factor of 2 (or change this to whatever suits your needs)
-                        let boostedPower = power * 100.0 // Boost the power level by a factor (e.g., 2.0)
-                        
-                        DispatchQueue.main.async {
-                            self.audioPower = Double(min(boostedPower, 50.0)) // Ensure power value doesn't exceed 1.0
-                        }
+                // Boost amplitude by a factor of 2 (or change this to whatever suits your needs)
+                let boostedPower = power * 100.0 // Boost the power level by a factor (e.g., 2.0)
+                
+                DispatchQueue.main.async {
+                    self.audioPower = Double(min(boostedPower, 50.0)) // Ensure power value doesn't exceed 1.0
+                }
                 
                 recorder.updateMeters()
                 DispatchQueue.main.async {
                     self.audioPower = Double(power) // ✅ Convert Float to Double
                 }
             }
-
 
             DispatchQueue.main.async {
                 self.audioFileURL = audioFilename
@@ -101,7 +116,6 @@ class AudioRecorder: NSObject, ObservableObject {
                 DispatchQueue.main.async{
                     Logger.shared.log("✅ Recording started successfully.")
                 }
-               
                 
                 NotificationCenter.default.post(name: .startWaveform, object: nil)
             }
@@ -187,28 +201,43 @@ class AudioRecorder: NSObject, ObservableObject {
             return
         }
         
-        self.isGeneratingNotes = true // Prevent multiple OpenAI calls
+        self.isGeneratingNotes = true
 
         WhisperAI.shared.transcribeAudio(audioURL: audioFile) { transcription in
             DispatchQueue.main.async {
                 if let transcription = transcription {
                     Logger.shared.log("✅ Transcription completed. Preparing to generate study notes...")
-                    self.transcribedNotes = transcription // Store raw transcript
+                    self.transcribedNotes = transcription
+                    
+                    // Get the parent directory of the audio file
+                    let audioDirectory = audioFile.deletingLastPathComponent()
+                    let baseFilename = audioFile.deletingPathExtension().lastPathComponent
+                    
+                    // Save transcript to same directory as audio
+                    let transcriptFile = audioDirectory.appendingPathComponent("\(baseFilename)_transcript.txt")
+                    do {
+                        try transcription.write(to: transcriptFile, atomically: true, encoding: .utf8)
+                        Logger.shared.log("📄 Transcript saved to: \(transcriptFile.path)")
+                        print("Transcript saved at: \(transcriptFile.path)")
+                    } catch {
+                        Logger.shared.log("❌ Failed to save transcript: \(error.localizedDescription)")
+                    }
 
-                    // ✅ Ensure OpenAI request is triggered
                     OpenAIClient.shared.generateStudyNotes(from: audioFile) { notes, tokens, cost in
                         DispatchQueue.main.async {
                             Logger.shared.log("✅ Notes successfully generated.")
-                            self.formattedNotes = notes // Update UI with new notes
-                            self.isGeneratingNotes = false // Reset flag
-                            self.isTranscribing = false // Reset flag
-
-                            // ✅ Ensure audio file is deleted to free space
+                            self.formattedNotes = notes
+                            self.isGeneratingNotes = false
+                            self.isTranscribing = false
+                            
+                            // Save notes to same directory (no optional binding needed)
+                            let notesFile = audioDirectory.appendingPathComponent("\(baseFilename)_notes.txt")
                             do {
-                                try FileManager.default.removeItem(at: audioFile)
-                                Logger.shared.log("🗑️ Deleted audio file: \(audioFile.path)")
+                                try notes.write(to: notesFile, atomically: true, encoding: .utf8)
+                                Logger.shared.log("📝 Notes saved to: \(notesFile.path)")
+                                print("Notes saved at: \(notesFile.path)")
                             } catch {
-                                Logger.shared.log("❌ Failed to delete audio file: \(error.localizedDescription)")
+                                Logger.shared.log("❌ Failed to save notes: \(error.localizedDescription)")
                             }
                         }
                     }
@@ -222,7 +251,6 @@ class AudioRecorder: NSObject, ObservableObject {
             }
         }
     }
-
     
 }
 

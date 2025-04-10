@@ -11,7 +11,7 @@ def transcribe_audio(audio_path):
         print(f"❌ Error: FFmpeg not found at {FFMPEG_PATH}. Please install it using 'brew install ffmpeg'")
         sys.exit(1)
 
-    model = whisper.load_model("medium")  # Use a smaller model to reduce lag
+    model = whisper.load_model("small")  # Use a smaller model to reduce lag
     result = model.transcribe(audio_path, fp16=False)  # Disable fp16 for better compatibility
     print(result["text"])
 

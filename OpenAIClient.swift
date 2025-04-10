@@ -24,7 +24,7 @@ class OpenAIClient {
     
     func sendMessageToChatGPT(message: String, completion: @escaping (String?, Int, Double) -> Void) {
         guard let apiKey = self.getAPIKey() else {
-            print("❌ Error: OpenAI API Key not found.")
+            Logger.shared.log("❌ Error: OpenAI API Key not found.")
             completion("Error: API Key not found", 0, 0.0)
             return
         }
@@ -45,14 +45,14 @@ class OpenAIClient {
             
             let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
             if let output = String(data: data, encoding: .utf8) {
-                print("🔍 Whisper Output: \(output)")
+                Logger.shared.log("🔍 Whisper Output: \(output)")
                 completion(output.trimmingCharacters(in: .whitespacesAndNewlines))
             } else {
-                print("❌ Whisper output was nil.")
+                Logger.shared.log("❌ Whisper output was nil.")
                 completion(nil)
             }
         } catch {
-            print("❌ Whisper transcription failed: \(error.localizedDescription)")
+            Logger.shared.log("❌ Whisper transcription failed: \(error.localizedDescription)")
             completion(nil)
         }
     }
@@ -68,7 +68,7 @@ class OpenAIClient {
             }
 
             guard let apiKey = self.getAPIKey() else {
-                print("❌ Error: OpenAI API Key not found.")
+                Logger.shared.log("❌ Error: OpenAI API Key not found.")
                 DispatchQueue.main.async {
                     AudioRecorder.shared.formattedNotes = "Error: API Key not found"
                 }
@@ -81,13 +81,13 @@ class OpenAIClient {
                 "model": "gpt-4o-mini",
                 "messages": [
                     ["role": "system", "content": "Your role is to take transcripts from Lecutres and then transform them into studayble notes"],
-                    ["role": "user", "content": "I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to bold important terms using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes. Also, please do not include ```markdown or ``` and use nested bullet points. Also, please include a section of potential questions that could be asked on an exam, or otherwise questions that can be asked or further research for better clarity:\n\(transcription)"]
+                    ["role": "user", "content": "I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to bold important terms using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes. Also, please do not include ```markdown or ``` and use nested bullet points. Also, please include a section of potential questions that could be asked on an exam, or otherwise questions that can be asked or further research for better clarity and dont exclude any details and be very comprehensive:\n\(transcription)"]
                 ],
                 "temperature": 0.7
             ]
 
             guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
-                print("❌ Error: Failed to encode JSON request.")
+                Logger.shared.log("❌ Error: Failed to encode JSON request.")
                 DispatchQueue.main.async {
                     AudioRecorder.shared.formattedNotes = "Error: Failed to encode request"
                 }
@@ -103,7 +103,7 @@ class OpenAIClient {
 
             let task = URLSession.shared.dataTask(with: request) { data, response, error in
                 if let error = error {
-                    print("❌ Error: \(error.localizedDescription)")
+                    Logger.shared.log("❌ Error: \(error.localizedDescription)")
                     DispatchQueue.main.async {
                         AudioRecorder.shared.formattedNotes = "Error: \(error.localizedDescription)"
                     }
@@ -112,7 +112,7 @@ class OpenAIClient {
                 }
 
                 guard let data = data else {
-                    print("❌ Error: No data received.")
+                    Logger.shared.log("❌ Error: No data received.")
                     DispatchQueue.main.async {
                         AudioRecorder.shared.formattedNotes = "Error: No data received"
                     }
@@ -132,9 +132,9 @@ class OpenAIClient {
                         let costPerToken = 0.000002 // Adjust based on actual pricing
                         let estimatedCost = Double(totalTokens) * costPerToken
 
-                        print("✅ AI Response (Study Notes): \(content)")
-                        print(" Tokens Used: \(totalTokens)")
-                        print("Estimated Cost: $\(String(format: "%.4f", estimatedCost))")
+                        Logger.shared.log("✅ AI Response (Study Notes): \(content)")
+                        Logger.shared.log(" Tokens Used: \(totalTokens)")
+                        Logger.shared.log("Estimated Cost: $\(String(format: "%.4f", estimatedCost))")
 
                         DispatchQueue.main.async {
                             AudioRecorder.shared.formattedNotes = content // Update the UI
@@ -143,14 +143,14 @@ class OpenAIClient {
 
                         completion(content, totalTokens, estimatedCost)
                     } else {
-                        print("❌ Error: Failed to parse OpenAI response.")
+                        Logger.shared.log("❌ Error: Failed to parse OpenAI response.")
                         DispatchQueue.main.async {
                             AudioRecorder.shared.formattedNotes = "Error: Failed to parse response"
                         }
                         completion("Error: Failed to parse response", 0, 0.0)
                     }
                 } catch {
-                    print("❌ Error: Failed to parse JSON: \(error.localizedDescription)")
+                    Logger.shared.log("❌ Error: Failed to parse JSON: \(error.localizedDescription)")
                     DispatchQueue.main.async {
                         AudioRecorder.shared.formattedNotes = "Error: Failed to parse JSON"
                     }

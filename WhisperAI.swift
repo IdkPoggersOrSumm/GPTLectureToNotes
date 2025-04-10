@@ -7,7 +7,6 @@ class WhisperAI {
     private init() {}
 
     func transcribeAudio(audioURL: URL, completion: @escaping (String?) -> Void) {
-        // Log that the transcription is starting
         DispatchQueue.main.async {
             Logger.shared.log("🎤 Starting transcription process for file: \(audioURL.path)")
         }
@@ -28,15 +27,11 @@ class WhisperAI {
             return
         }
 
-        // Log that we are about to run the transcription script
         DispatchQueue.main.async {
             Logger.shared.log("🐍 Running Whisper transcription script at path: \(scriptPath)")
         }
 
-        // Perform the transcription process on a background thread
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
-
+        DispatchQueue.global(qos: .userInitiated).async {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
             process.arguments = [scriptPath, audioURL.path]
@@ -62,17 +57,10 @@ class WhisperAI {
                     }
                 }
 
-                if let output = String(data: outputData, encoding: .utf8), !output.isEmpty {
+                if let output = String(data: outputData, encoding: .utf8) {
                     DispatchQueue.main.async {
-                        Logger.shared.log("✅ Transcription completed, sending to OpenAI...")
-                    }
-                    DispatchQueue.main.async {
-                        // Handle result and UI updates
-                        OpenAIClient.shared.generateStudyNotes(from: audioURL) { notes, tokens, cost in
-                            DispatchQueue.main.async {
-                                Logger.shared.log("✅ Notes successfully generated.")
-                            }
-                        }
+                        Logger.shared.log("✅ Transcription completed successfully.")
+                        completion(output) // THIS WAS MISSING - NOW RETURNS THE TRANSCRIPTION
                     }
                 } else {
                     DispatchQueue.main.async {
