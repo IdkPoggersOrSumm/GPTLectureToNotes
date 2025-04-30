@@ -2,12 +2,10 @@ import AVFoundation
 import Combine
 import AppKit
 
-
 extension Notification.Name {
     static let startWaveform = Notification.Name("startWaveform")
     static let stopWaveform = Notification.Name("stopWaveform")
 }
-
 
 class AudioRecorder: NSObject, ObservableObject {
     private var audioRecorder: AVAudioRecorder?
@@ -19,13 +17,11 @@ class AudioRecorder: NSObject, ObservableObject {
     @Published var isGeneratingNotes = false
     @Published var transcribedNotes: String? = "Transcription in progress..."
     @Published var consoleOutput: String = ""
-    @Published var audioPower: Double = 0.0 // 🔥 Stores real-time audio level
+    @Published var audioPower: Double = 0.0
+    private var powerUpdateTimer: Timer?
+    private var lastPower: Float = 0.0
     
-    
-    
-
-
-    static let shared = AudioRecorder() // Singleton instance
+    static let shared = AudioRecorder()
 
     override init() {
         super.init()
@@ -36,13 +32,10 @@ class AudioRecorder: NSObject, ObservableObject {
         let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
         let customDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
         
-        // Check if directory exists
         if FileManager.default.fileExists(atPath: customDir.path) {
             NSWorkspace.shared.open(customDir)
             Logger.shared.log("📂 Opened storage directory: \(customDir.path)")
         } else {
-            Logger.shared.log("⚠️ Directory does not exist yet: \(customDir.path)")
-            // Optionally create the directory if it doesn't exist
             do {
                 try FileManager.default.createDirectory(at: customDir, withIntermediateDirectories: true, attributes: nil)
                 NSWorkspace.shared.open(customDir)
@@ -53,13 +46,10 @@ class AudioRecorder: NSObject, ObservableObject {
         }
     }
     
-    
-    
-    // Allows the user to select an audio file and triggers transcription + notes generation
     func importAudioFile() {
         let openPanel = NSOpenPanel()
         openPanel.title = "Select an Audio File"
-        openPanel.allowedContentTypes = [.audio] // Only allow audio files
+        openPanel.allowedContentTypes = [.audio]
         openPanel.allowsMultipleSelection = false
         openPanel.canChooseDirectories = false
 
@@ -69,8 +59,6 @@ class AudioRecorder: NSObject, ObservableObject {
                     self.audioFileURL = selectedFileURL
                     self.isTranscribing = true
                     Logger.shared.log("🎵 Selected audio file: \(selectedFileURL.lastPathComponent)")
-                    
-                    // Trigger transcription and notes generation
                     self.transcribeRecording(audioFile: selectedFileURL)
                 }
             } else {
@@ -81,19 +69,18 @@ class AudioRecorder: NSObject, ObservableObject {
     
     private func logToConsole(_ message: String) {
         DispatchQueue.main.async {
-            self.consoleOutput = message  // Overwrite with the latest message
-            print(self.consoleOutput)     // Also print to Xcode console
+            self.consoleOutput = message
+            print(self.consoleOutput)
         }
     }
     
     func redoTranscription() {
-            // Logic to redo the transcription
-        }
+        // Logic to redo the transcription
+    }
 
     func startRecording() {
         Logger.shared.log("🎤 Starting new recording...")
-
-        // Reset state for new session
+        
         DispatchQueue.main.async {
             self.formattedNotes = "Waiting for transcription..."
             self.transcribedNotes = nil
@@ -101,7 +88,6 @@ class AudioRecorder: NSObject, ObservableObject {
             self.isTranscribing = false
         }
 
-        // Create custom directory in Downloads if it doesn't exist
         let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
         let customDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
         
@@ -111,7 +97,6 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("❌ Failed to create directory: \(error.localizedDescription)")
         }
         
-        // Create unique filename with timestamp
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyyMMdd_HHmmss"
         let timestamp = dateFormatter.string(from: Date())
@@ -130,40 +115,46 @@ class AudioRecorder: NSObject, ObservableObject {
             audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.delegate = self
             audioRecorder?.prepareToRecord()
-            audioRecorder?.isMeteringEnabled = true // ✅ Enable metering to track volume
+            audioRecorder?.isMeteringEnabled = true
             audioRecorder?.record()
             
-            // Start monitoring audio levels
-            Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { timer in
-                guard let recorder = self.audioRecorder, recorder.isRecording else {
-                    timer.invalidate() // Stop timer if recording stops
-                    return
-                }
+            // Reset power state
+            lastPower = 0.0
+            audioPower = 0.0
+            
+            // Create and schedule timer on main run loop
+            powerUpdateTimer?.invalidate()
+            powerUpdateTimer = Timer.scheduledTimer(
+                withTimeInterval: 0.05, // Faster updates for smoother visualization
+                repeats: true
+            ) { [weak self] _ in
+                guard let self = self else { return }
                 
-                recorder.updateMeters()
-                let power = pow(10, recorder.averagePower(forChannel: 0) / 20) // Convert to linear scale
-
-                // Boost amplitude by a factor of 2 (or change this to whatever suits your needs)
-                let boostedPower = power * 100.0 // Boost the power level by a factor (e.g., 2.0)
+                self.audioRecorder?.updateMeters()
+                let dB = self.audioRecorder?.averagePower(forChannel: 0) ?? -80.0
+                
+                // Convert dB to linear scale (0-1) with better sensitivity
+                let linearPower = pow(10, (dB + 30) / 20) // Adjust +60 to control sensitivity
+                
+                // Apply smoothing and scaling
+                let smoothedPower = (self.lastPower * 0.7) + (linearPower * 0.3)
+                let scaledPower = min(smoothedPower * 2.5, 1.0) // Scale up for better visibility
                 
                 DispatchQueue.main.async {
-                    self.audioPower = Double(min(boostedPower, 50.0)) // Ensure power value doesn't exceed 1.0
+                    self.audioPower = Double(scaledPower)
                 }
                 
-                recorder.updateMeters()
-                DispatchQueue.main.async {
-                    self.audioPower = Double(power) // ✅ Convert Float to Double
-                }
+                self.lastPower = smoothedPower
             }
-
+            
+            // Add timer to main run loop
+            RunLoop.main.add(powerUpdateTimer!, forMode: .common)
+            
             DispatchQueue.main.async {
                 self.audioFileURL = audioFilename
                 self.isRecording = true
                 self.isPaused = false
-                DispatchQueue.main.async{
-                    Logger.shared.log("✅ Recording started successfully.")
-                }
-                
+                Logger.shared.log("✅ Recording started successfully.")
                 NotificationCenter.default.post(name: .startWaveform, object: nil)
             }
         } catch {
@@ -190,7 +181,7 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("⚠️ Cannot resume: No paused recording.")
             return
         }
-        recorder.record() // ✅ Actually resume recording
+        recorder.record()
         DispatchQueue.main.async {
             self.isPaused = false
             self.isRecording = true
@@ -204,23 +195,23 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("⚠️ Cannot stop: No active recording.")
             return
         }
-        recorder.stop()
         
+        powerUpdateTimer?.invalidate()
+        powerUpdateTimer = nil
+        recorder.stop()
+
         DispatchQueue.main.async {
             self.isRecording = false
             self.isPaused = false
             self.audioRecorder = nil
+            self.audioPower = 0.0
             Logger.shared.log("✅ Recording stopped.")
             NotificationCenter.default.post(name: .stopWaveform, object: nil)
-            self.audioPower = 0.0 // 🔥 Reset power level when recording stops
+        }
 
-
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
             if let fileURL = self.audioFileURL {
-                Logger.shared.log("📁 Recorded file available at: \(fileURL.path)")
-                if !self.isTranscribing { // Prevent duplicate calls
-                    self.isTranscribing = true
-                    self.transcribeRecording(audioFile: fileURL)
-                }
+                self.transcribeRecording(audioFile: fileURL)
             } else {
                 Logger.shared.log("❌ No valid audio file URL after stopping recording.")
             }
@@ -256,16 +247,13 @@ class AudioRecorder: NSObject, ObservableObject {
                     Logger.shared.log("✅ Transcription completed. Preparing to generate study notes...")
                     self.transcribedNotes = transcription
                     
-                    // Get the parent directory of the audio file
                     let audioDirectory = audioFile.deletingLastPathComponent()
                     let baseFilename = audioFile.deletingPathExtension().lastPathComponent
-                    
-                    // Save transcript to same directory as audio
                     let transcriptFile = audioDirectory.appendingPathComponent("\(baseFilename)_transcript.txt")
+                    
                     do {
                         try transcription.write(to: transcriptFile, atomically: true, encoding: .utf8)
                         Logger.shared.log("📄 Transcript saved to: \(transcriptFile.path)")
-                        print("Transcript saved at: \(transcriptFile.path)")
                     } catch {
                         Logger.shared.log("❌ Failed to save transcript: \(error.localizedDescription)")
                     }
@@ -277,12 +265,10 @@ class AudioRecorder: NSObject, ObservableObject {
                             self.isGeneratingNotes = false
                             self.isTranscribing = false
                             
-                            // Save notes to same directory (no optional binding needed)
                             let notesFile = audioDirectory.appendingPathComponent("\(baseFilename)_notes.txt")
                             do {
                                 try notes.write(to: notesFile, atomically: true, encoding: .utf8)
                                 Logger.shared.log("📝 Notes saved to: \(notesFile.path)")
-                                print("Notes saved at: \(notesFile.path)")
                             } catch {
                                 Logger.shared.log("❌ Failed to save notes: \(error.localizedDescription)")
                             }
@@ -298,11 +284,7 @@ class AudioRecorder: NSObject, ObservableObject {
             }
         }
     }
-    
-    
 }
-
-
 
 extension AudioRecorder: AVAudioRecorderDelegate {
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
