@@ -133,12 +133,12 @@ class AudioRecorder: NSObject, ObservableObject {
                 self.audioRecorder?.updateMeters()
                 let dB = self.audioRecorder?.averagePower(forChannel: 0) ?? -80.0
                 
-                // Convert dB to linear scale (0-1) with better sensitivity
-                let linearPower = pow(10, (dB + 30) / 20) // Adjust +60 to control sensitivity
+                // Convert dB to linear scale (0-1) with better sens itivity
+                let linearPower = pow(10, (dB + 5) / 20) // More responsive to low volume // Adjust +60 to control sensitivity
                 
                 // Apply smoothing and scaling
                 let smoothedPower = (self.lastPower * 0.7) + (linearPower * 0.3)
-                let scaledPower = min(smoothedPower * 2.5, 1.0) // Scale up for better visibility
+                let scaledPower = min(smoothedPower * 7, 1.0) // Taller waveform // Scale up for better visibility
                 
                 DispatchQueue.main.async {
                     self.audioPower = Double(scaledPower)
@@ -228,6 +228,23 @@ class AudioRecorder: NSObject, ObservableObject {
                     Logger.shared.log("❌ Microphone access denied.")
                 }
             }
+        }
+    }
+    
+    func clearStorageDirectory() {
+        let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+        let customDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
+        
+        do {
+            let fileManager = FileManager.default
+            let fileURLs = try fileManager.contentsOfDirectory(at: customDir, includingPropertiesForKeys: nil, options: [])
+            for fileURL in fileURLs {
+                try fileManager.removeItem(at: fileURL)
+            Logger.shared.log("🧹 Cleared all files in storage directory.")
+            }
+            Logger.shared.log("🧹 Cleared all files in storage directory.")
+        } catch {
+            Logger.shared.log("❌ Failed to clear storage: \(error.localizedDescription)")
         }
     }
 

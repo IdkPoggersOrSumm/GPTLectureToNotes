@@ -31,7 +31,7 @@ struct ContentView: View {
             HStack(spacing: 0) {
                 // Settings Menu (left panel)
                 if showSettingsMenu {
-                    SettingsMenuView(showSettingsMenu: $showSettingsMenu)
+                    HamburgerMenu(showSettingsMenu: $showSettingsMenu)
                         .frame(width: 200)
                         .transition(.move(edge: .leading))
                 }

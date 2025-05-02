@@ -14,7 +14,7 @@
 
 import SwiftUI
 
-struct SettingsMenuView: View {
+struct HamburgerMenu: View {
     @Binding var showSettingsMenu: Bool
     @State private var selectedSetting: String? = "General"
     @State private var showAPIKeyInput = false
@@ -78,6 +78,13 @@ struct SettingsMenuView: View {
                         APIKeyInputView()
                     }
                     
+                    SettingsRow(title: "Clear Storage", isSelected: false) {
+                        AudioRecorder.shared.clearStorageDirectory()
+                    }
+                    .icon("trash")
+                    .font(.system(size: 18))
+                  
+                    
                 }
             }
             
@@ -91,7 +98,7 @@ struct SettingsMenuView: View {
             // Footer
             HStack {
                 Spacer()
-                Text("v1.1.0")
+                Text("v1.2.0")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
