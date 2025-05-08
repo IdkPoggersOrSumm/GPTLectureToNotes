@@ -54,8 +54,8 @@ struct HamburgerMenu: View {
                     }
                     .icon("square.and.arrow.down")
                     .font(.system(size: 18))
-                    
-                    
+                
+               
                     // Example: In your SettingsView
                     SettingsRow(title: "OpenAI API Key", isSelected: false) {
                         // Present the API key input view (e.g., as a sheet or navigation link)
@@ -98,7 +98,7 @@ struct HamburgerMenu: View {
             // Footer
             HStack {
                 Spacer()
-                Text("v1.2.0")
+                Text("v1.2.1")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }

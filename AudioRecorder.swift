@@ -257,39 +257,84 @@ class AudioRecorder: NSObject, ObservableObject {
         }
         
         self.isGeneratingNotes = true
+        
+        
+        
+
 
         WhisperAI.shared.transcribeAudio(audioURL: audioFile) { transcription in
             DispatchQueue.main.async {
                 if let transcription = transcription {
                     Logger.shared.log("✅ Transcription completed. Preparing to generate study notes...")
                     self.transcribedNotes = transcription
-                    
-                    let audioDirectory = audioFile.deletingLastPathComponent()
-                    let baseFilename = audioFile.deletingPathExtension().lastPathComponent
-                    let transcriptFile = audioDirectory.appendingPathComponent("\(baseFilename)_transcript.txt")
-                    
-                    do {
-                        try transcription.write(to: transcriptFile, atomically: true, encoding: .utf8)
-                        Logger.shared.log("📄 Transcript saved to: \(transcriptFile.path)")
-                    } catch {
-                        Logger.shared.log("❌ Failed to save transcript: \(error.localizedDescription)")
-                    }
 
-                    OpenAIClient.shared.generateStudyNotes(from: audioFile) { notes, tokens, cost in
-                        DispatchQueue.main.async {
-                            Logger.shared.log("✅ Notes successfully generated.")
-                            self.formattedNotes = notes
-                            self.isGeneratingNotes = false
-                            self.isTranscribing = false
-                            
-                            let notesFile = audioDirectory.appendingPathComponent("\(baseFilename)_notes.txt")
-                            do {
-                                try notes.write(to: notesFile, atomically: true, encoding: .utf8)
-                                Logger.shared.log("📝 Notes saved to: \(notesFile.path)")
-                            } catch {
-                                Logger.shared.log("❌ Failed to save notes: \(error.localizedDescription)")
+                    // Temporarily save transcript with timestamp name
+                    let audioDirectory = audioFile.deletingLastPathComponent()
+                    let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
+                        .replacingOccurrences(of: "/", with: "-")
+                        .replacingOccurrences(of: ":", with: ".")
+                    let tempTranscriptFile = audioDirectory.appendingPathComponent("temp_transcript_\(timestamp).txt")
+
+                    do {
+                        try transcription.write(to: tempTranscriptFile, atomically: true, encoding: .utf8)
+                        Logger.shared.log("📄 Temporary transcript saved to: \(tempTranscriptFile.path)")
+
+                        OpenAIClient.shared.generateStudyNotes(from: audioFile) { notes, tokens, cost in
+                            DispatchQueue.main.async {
+                                Logger.shared.log("✅ Notes successfully generated.")
+                                self.formattedNotes = notes
+                                self.isGeneratingNotes = false
+                                self.isTranscribing = false
+
+                                // Extract first words from notes for final filename
+                                let firstWords = self.extractFirstWords(from: notes, count: 6)
+                                let cleanFilename = self.cleanFilename(from: firstWords)
+                                let baseFilename = cleanFilename.isEmpty ? "lecture_notes" : cleanFilename
+
+                                // Get the Downloads directory and create cache directory
+                                let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
+                                let cacheDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
+
+                                do {
+                                    try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+                                    Logger.shared.log("📁 Cache directory ensured at: \(cacheDir.path)")
+                                } catch {
+                                    Logger.shared.log("❌ Couldn't create cache directory: \(error.localizedDescription)")
+                                }
+
+                                // Final file paths
+                                let finalAudioFile = cacheDir.appendingPathComponent("\(baseFilename).m4a")
+                                let finalTranscriptFile = cacheDir.appendingPathComponent("\(baseFilename)_transcript.txt")
+                                let finalNotesFile = cacheDir.appendingPathComponent("\(baseFilename)_notes.md")
+
+                                DispatchQueue.global(qos: .utility).async {
+                                    // Rename files
+                                    self.renameFile(from: audioFile, to: finalAudioFile)
+                                    Logger.shared.log("🎵 Audio file renamed to: \(finalAudioFile.lastPathComponent)")
+
+                                    self.renameFile(from: tempTranscriptFile, to: finalTranscriptFile)
+                                    Logger.shared.log("📄 Transcript file renamed to: \(finalTranscriptFile.lastPathComponent)")
+
+                                    // Save notes to file
+                                    do {
+                                        try notes.write(to: finalNotesFile, atomically: true, encoding: .utf8)
+                                        Logger.shared.log("📝 Notes saved to: \(finalNotesFile.path)")
+                                    } catch {
+                                        Logger.shared.log("❌ Failed to save notes: \(error.localizedDescription)")
+                                    }
+
+                                    // Update UI with final audio file path
+                                    if FileManager.default.fileExists(atPath: finalAudioFile.path) {
+                                        DispatchQueue.main.async {
+                                            self.audioFileURL = finalAudioFile
+                                            Logger.shared.log("🔗 audioFileURL updated to: \(finalAudioFile.path)")
+                                        }
+                                    }
+                                }
                             }
                         }
+                    } catch {
+                        Logger.shared.log("❌ Failed to save temporary transcript: \(error.localizedDescription)")
                     }
                 } else {
                     Logger.shared.log("❌ Transcription failed.")
@@ -301,7 +346,60 @@ class AudioRecorder: NSObject, ObservableObject {
             }
         }
     }
-}
+
+    private func renameFile(from oldURL: URL, to newURL: URL) {
+        do {
+            // Ensure the destination directory exists
+            let directoryURL = newURL.deletingLastPathComponent()
+            if !FileManager.default.fileExists(atPath: directoryURL.path) {
+                try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            }
+            
+            // Check if source file exists
+            guard FileManager.default.fileExists(atPath: oldURL.path) else {
+                Logger.shared.log("❌ Source file doesn't exist at: \(oldURL.path)")
+                return
+            }
+            
+            // Remove destination if it exists
+            if FileManager.default.fileExists(atPath: newURL.path) {
+                try FileManager.default.removeItem(at: newURL)
+            }
+            
+            try FileManager.default.moveItem(at: oldURL, to: newURL)
+            Logger.shared.log("🔀 Renamed file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent)")
+        } catch {
+            Logger.shared.log("❌ Failed to rename file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent): \(error.localizedDescription)")
+        }
+    }
+
+    private func extractFirstWords(from text: String, count: Int) -> String {
+        // Remove markdown headers and emphasis
+        let cleanedText = text.replacingOccurrences(of: "#", with: "")
+            .replacingOccurrences(of: "*", with: "")
+            .replacingOccurrences(of: "`", with: "")
+        
+        let words = cleanedText.components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .prefix(count)
+        return words.joined(separator: "_")
+    }
+
+    private func cleanFilename(from text: String) -> String {
+        var cleaned = text
+        // Remove special characters
+        let invalidChars = CharacterSet(charactersIn: ":/\\?%*|\"<>")
+        cleaned = cleaned.components(separatedBy: invalidChars).joined(separator: "")
+        // Trim to reasonable length
+        let maxLength = 50
+        if cleaned.count > maxLength {
+            cleaned = String(cleaned.prefix(maxLength))
+        }
+        return cleaned
+    }}
+
+
+
 
 extension AudioRecorder: AVAudioRecorderDelegate {
     func audioRecorderDidFinishRecording(_ recorder: AVAudioRecorder, successfully flag: Bool) {
