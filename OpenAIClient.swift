@@ -13,6 +13,15 @@ class OpenAIClient {
     // Key for UserDefaults storage
     private let userAPIKeyKey = "userOpenAIAPIKey"
     
+    //Tracks selected prompt
+    var currentPrompt: PromptOption = PromptPresets.all[0]
+    
+    // Allows the changing of prompts
+    func setPrompt(_ prompt: PromptOption) {
+           self.currentPrompt = prompt
+           Logger.shared.log("📝 Changed prompt to: \(prompt.name)")
+       }
+    
     // Get the active API key (priority: UserDefaults -> Secrets.plist)
      func getAPIKey() -> String? {
         // Check UserDefaults first
@@ -98,11 +107,8 @@ class OpenAIClient {
 
             let url = URL(string: "https://api.openai.com/v1/chat/completions")!
             
-            let prompt = """
-                
-                I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please let the first six words in your notes be a title. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to bold important terms using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes. Also, please do not include ```markdown or ``` and use nested bullet points. Also, please include a section of potential questions that could be asked on an exam, or otherwise questions that can be asked or further research for better clarity and dont exclude any details and be very comprehensive:\n\(transcription)
-
-                """
+            let prompt = self.currentPrompt.prompt + transcription
+            
             let requestData: [String: Any] = [
                 "model": "gpt-4.1-nano",
                 "messages": [

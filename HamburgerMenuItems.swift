@@ -18,13 +18,58 @@ struct HamburgerMenu: View {
     @Binding var showSettingsMenu: Bool
     @State private var selectedSetting: String? = "General"
     @State private var showAPIKeyInput = false
+    @State private var showPromptSelection = false
     
     let settingsOptions = [
         "Import Audio",
         "Storage",
         "API Key",
+        "OpenAI Prompt",
 
     ]
+    
+     struct PromptSelectionView: View {
+            @Environment(\.presentationMode) var presentationMode
+            @State private var selectedPrompt: PromptOption = OpenAIClient.shared.currentPrompt
+            
+            var body: some View {
+                VStack(alignment: .leading) {
+                    Text("Select Prompt Style")
+                        .font(.headline)
+                        .padding()
+                    
+                    List(PromptPresets.all) { prompt in
+                        HStack {
+                            Text(prompt.name)
+                                .font(.system(size: 14))
+                            Spacer()
+                            if prompt.id == selectedPrompt.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.accentColor)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            selectedPrompt = prompt
+                            OpenAIClient.shared.setPrompt(prompt)
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                    }
+                    .listStyle(.plain)
+                    
+                    Button("Done") {
+                        presentationMode.wrappedValue.dismiss()
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                }
+                .frame(width: 300, height: 400)
+                .onAppear {
+                    selectedPrompt = OpenAIClient.shared.currentPrompt
+                }
+            }
+        }
+    
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -83,8 +128,17 @@ struct HamburgerMenu: View {
                     }
                     .icon("trash")
                     .font(.system(size: 18))
-                  
                     
+                    SettingsRow(title: "OpenAI Prompt", isSelected: false) {
+                        showPromptSelection.toggle()
+                        
+                    }
+                    .icon("text.bubble")
+                    .font(.system(size: 18))
+                  
+                    .sheet(isPresented: $showPromptSelection) {
+                        PromptSelectionView()
+                    }
                 }
             }
             
@@ -98,7 +152,7 @@ struct HamburgerMenu: View {
             // Footer
             HStack {
                 Spacer()
-                Text("v1.2.1")
+                Text("v1.3.0")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -186,6 +240,9 @@ struct SettingsRow: View {
         }
         .buttonStyle(.plain)
     }
+    
+    
+
     
     func icon(_ systemName: String) -> SettingsRow {
         var view = self
