@@ -161,7 +161,7 @@ class OpenAIClient {
                        let usage = jsonResponse["usage"] as? [String: Any],
                        let totalTokens = usage["total_tokens"] as? Int {
 
-                        let costPerToken = 0.000002 // Adjust based on actual pricing
+                        let costPerToken = 0.0000004 // Adjust based on actual pricing
                         let estimatedCost = Double(totalTokens) * costPerToken
 
                         Logger.shared.log("✅ AI Response (Study Notes): \(content)")
@@ -192,5 +192,80 @@ class OpenAIClient {
 
             task.resume()
         }
+    }
+
+    func generateStudyNotes(from text: String, completion: @escaping (String, Int, Double) -> Void) {
+        guard let apiKey = self.getAPIKey() else {
+            Logger.shared.log("❌ Error: OpenAI API Key not found.")
+            completion("Error: API Key not found", 0, 0.0)
+            return
+        }
+
+        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+
+        let prompt = self.currentPrompt.prompt + text
+
+        let requestData: [String: Any] = [
+            "model": "gpt-4.1-nano",
+            "messages": [
+                ["role": "system", "content": "Your role is to take transcripts from Lecutres and then transform them into studayble notes"],
+                ["role": "user", "content": prompt ]
+            ],
+            "temperature": 0.7
+        ]
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let jsonData = try? JSONSerialization.data(withJSONObject: requestData) {
+            request.httpBody = jsonData
+        } else {
+            Logger.shared.log("❌ Error: Failed to encode JSON request.")
+            completion("Error: Failed to encode request", 0, 0.0)
+            return
+        }
+
+        let task = URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                Logger.shared.log("❌ Error: \(error.localizedDescription)")
+                completion("Error: \(error.localizedDescription)", 0, 0.0)
+                return
+            }
+
+            guard let data = data else {
+                Logger.shared.log("❌ Error: No data received.")
+                completion("Error: No data received", 0, 0.0)
+                return
+            }
+
+            do {
+                if let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
+                   let choices = jsonResponse["choices"] as? [[String: Any]],
+                   let firstChoice = choices.first,
+                   let message = firstChoice["message"] as? [String: Any],
+                   let content = message["content"] as? String,
+                   let usage = jsonResponse["usage"] as? [String: Any],
+                   let totalTokens = usage["total_tokens"] as? Int {
+
+                    let costPerToken = 0.000002 // Adjust based on actual pricing
+                    let estimatedCost = Double(totalTokens) * costPerToken
+
+                    Logger.shared.log("✅ AI Response (Study Notes): \(content)")
+                    Logger.shared.log(" Tokens Used: \(totalTokens)")
+                    Logger.shared.log("Estimated Cost: $\(String(format: "%.4f", estimatedCost))")
+
+                    completion(content, totalTokens, estimatedCost)
+                } else {
+                    Logger.shared.log("❌ Error: Failed to parse OpenAI response.")
+                    completion("Error: Failed to parse response", 0, 0.0)
+                }
+            } catch {
+                Logger.shared.log("❌ Error: Failed to parse JSON: \(error.localizedDescription)")
+                completion("Error: Failed to parse JSON", 0, 0.0)
+            }
+        }
+
+        task.resume()
     }
 }

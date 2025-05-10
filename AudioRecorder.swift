@@ -7,6 +7,7 @@ extension Notification.Name {
     static let stopWaveform = Notification.Name("stopWaveform")
 }
 
+
 class AudioRecorder: NSObject, ObservableObject {
     private var audioRecorder: AVAudioRecorder?
     @Published var audioFileURL: URL?
@@ -22,7 +23,7 @@ class AudioRecorder: NSObject, ObservableObject {
     private var lastPower: Float = 0.0
     
     static let shared = AudioRecorder()
-
+    
     override init() {
         super.init()
         requestMicrophoneAccess()
@@ -45,6 +46,49 @@ class AudioRecorder: NSObject, ObservableObject {
             }
         }
     }
+
+    func importYouTubeAudio(from link: String) {
+        let tempDir = FileManager.default.temporaryDirectory
+        let outputPath = tempDir.appendingPathComponent("yt_audio.wav")
+
+        try? FileManager.default.removeItem(at: outputPath)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/opt/homebrew/bin/yt-dlp")
+        process.arguments = [
+            "--ffmpeg-location", "/opt/homebrew/bin",
+            "-f", "bestaudio",
+            "-x", "--audio-format", "wav",
+            "-o", outputPath.path,
+            link
+        ]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let output = String(data: handle.availableData, encoding: .utf8) ?? "Invalid output"
+            Logger.shared.log("🔍 yt-dlp output: \(output)")
+        }
+
+        process.terminationHandler = { [weak self] _ in
+            DispatchQueue.main.async {
+                if FileManager.default.fileExists(atPath: outputPath.path) {
+                    Logger.shared.log("🎧 Downloaded YouTube audio to: \(outputPath.path)")
+                    self?.transcribeRecording(audioFile: outputPath)
+                    // Deletion after transcription now handled in transcribeRecording
+                } else {
+                    Logger.shared.log("❌ Failed to download YouTube audio.")
+                }
+            }
+        }
+
+        do {
+            try process.run()
+        } catch {
+            Logger.shared.log("❌ Could not run yt-dlp: \(error.localizedDescription)")
+        }
+    }
     
     func importAudioFile() {
         let openPanel = NSOpenPanel()
@@ -52,7 +96,7 @@ class AudioRecorder: NSObject, ObservableObject {
         openPanel.allowedContentTypes = [.audio]
         openPanel.allowsMultipleSelection = false
         openPanel.canChooseDirectories = false
-
+        
         openPanel.begin { response in
             if response == .OK, let selectedFileURL = openPanel.url {
                 DispatchQueue.main.async {
@@ -77,7 +121,7 @@ class AudioRecorder: NSObject, ObservableObject {
     func redoTranscription() {
         // Logic to redo the transcription
     }
-
+    
     func startRecording() {
         Logger.shared.log("🎤 Starting new recording...")
         
@@ -87,7 +131,7 @@ class AudioRecorder: NSObject, ObservableObject {
             self.isGeneratingNotes = false
             self.isTranscribing = false
         }
-
+        
         let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
         let customDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
         
@@ -110,7 +154,7 @@ class AudioRecorder: NSObject, ObservableObject {
             AVNumberOfChannelsKey: 1,
             AVEncoderAudioQualityKey: AVAudioQuality.high.rawValue
         ]
-
+        
         do {
             audioRecorder = try AVAudioRecorder(url: audioFilename, settings: settings)
             audioRecorder?.delegate = self
@@ -161,7 +205,7 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("❌ Failed to start recording: \(error.localizedDescription)")
         }
     }
-
+    
     func pauseRecording() {
         Logger.shared.log("⏸ Attempting to pause recording...")
         guard let recorder = audioRecorder, recorder.isRecording else {
@@ -174,7 +218,7 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("✅ Recording paused.")
         }
     }
-
+    
     func resumeRecording() {
         Logger.shared.log("▶️ Attempting to resume recording...")
         guard let recorder = audioRecorder, !recorder.isRecording else {
@@ -188,7 +232,7 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("✅ Recording resumed.")
         }
     }
-
+    
     func stopRecording() {
         Logger.shared.log("🛑 Attempting to stop recording...")
         guard let recorder = audioRecorder else {
@@ -199,7 +243,7 @@ class AudioRecorder: NSObject, ObservableObject {
         powerUpdateTimer?.invalidate()
         powerUpdateTimer = nil
         recorder.stop()
-
+        
         DispatchQueue.main.async {
             self.isRecording = false
             self.isPaused = false
@@ -208,7 +252,7 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("✅ Recording stopped.")
             NotificationCenter.default.post(name: .stopWaveform, object: nil)
         }
-
+        
         DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 0.5) {
             if let fileURL = self.audioFileURL {
                 self.transcribeRecording(audioFile: fileURL)
@@ -217,7 +261,7 @@ class AudioRecorder: NSObject, ObservableObject {
             }
         }
     }
-
+    
     private func requestMicrophoneAccess() {
         Logger.shared.log("🔊 Requesting microphone access...")
         AVCaptureDevice.requestAccess(for: .audio) { granted in
@@ -240,14 +284,14 @@ class AudioRecorder: NSObject, ObservableObject {
             let fileURLs = try fileManager.contentsOfDirectory(at: customDir, includingPropertiesForKeys: nil, options: [])
             for fileURL in fileURLs {
                 try fileManager.removeItem(at: fileURL)
-            Logger.shared.log("🧹 Cleared all files in storage directory.")
+                Logger.shared.log("🧹 Cleared all files in storage directory.")
             }
             Logger.shared.log("🧹 Cleared all files in storage directory.")
         } catch {
             Logger.shared.log("❌ Failed to clear storage: \(error.localizedDescription)")
         }
     }
-
+    
     func transcribeRecording(audioFile: URL) {
         Logger.shared.log("📝 Sending file to WhisperAI for transcription: \(audioFile.path)")
         
@@ -260,61 +304,61 @@ class AudioRecorder: NSObject, ObservableObject {
         
         
         
-
-
+        
+        
         WhisperAI.shared.transcribeAudio(audioURL: audioFile) { transcription in
             DispatchQueue.main.async {
                 if let transcription = transcription {
                     Logger.shared.log("✅ Transcription completed. Preparing to generate study notes...")
                     self.transcribedNotes = transcription
-
+                    
                     // Temporarily save transcript with timestamp name
                     let audioDirectory = audioFile.deletingLastPathComponent()
                     let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short)
                         .replacingOccurrences(of: "/", with: "-")
                         .replacingOccurrences(of: ":", with: ".")
                     let tempTranscriptFile = audioDirectory.appendingPathComponent("temp_transcript_\(timestamp).txt")
-
+                    
                     do {
                         try transcription.write(to: tempTranscriptFile, atomically: true, encoding: .utf8)
                         Logger.shared.log("📄 Temporary transcript saved to: \(tempTranscriptFile.path)")
-
+                        
                         OpenAIClient.shared.generateStudyNotes(from: audioFile) { notes, tokens, cost in
                             DispatchQueue.main.async {
                                 Logger.shared.log("✅ Notes successfully generated.")
                                 self.formattedNotes = notes
                                 self.isGeneratingNotes = false
                                 self.isTranscribing = false
-
+                                
                                 // Extract first words from notes for final filename
                                 let firstWords = self.extractFirstWords(from: notes, count: 6)
                                 let cleanFilename = self.cleanFilename(from: firstWords)
                                 let baseFilename = cleanFilename.isEmpty ? "lecture_notes" : cleanFilename
-
+                                
                                 // Get the Downloads directory and create cache directory
                                 let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first!
                                 let cacheDir = downloadsDir.appendingPathComponent("LectureToNotesCache")
-
+                                
                                 do {
                                     try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
                                     Logger.shared.log("📁 Cache directory ensured at: \(cacheDir.path)")
                                 } catch {
                                     Logger.shared.log("❌ Couldn't create cache directory: \(error.localizedDescription)")
                                 }
-
+                                
                                 // Final file paths
                                 let finalAudioFile = cacheDir.appendingPathComponent("\(baseFilename).m4a")
                                 let finalTranscriptFile = cacheDir.appendingPathComponent("\(baseFilename)_transcript.txt")
                                 let finalNotesFile = cacheDir.appendingPathComponent("\(baseFilename)_notes.md")
-
+                                
                                 DispatchQueue.global(qos: .utility).async {
                                     // Rename files
                                     self.renameFile(from: audioFile, to: finalAudioFile)
                                     Logger.shared.log("🎵 Audio file renamed to: \(finalAudioFile.lastPathComponent)")
-
+                                    
                                     self.renameFile(from: tempTranscriptFile, to: finalTranscriptFile)
                                     Logger.shared.log("📄 Transcript file renamed to: \(finalTranscriptFile.lastPathComponent)")
-
+                                    
                                     // Save notes to file
                                     do {
                                         try notes.write(to: finalNotesFile, atomically: true, encoding: .utf8)
@@ -322,13 +366,22 @@ class AudioRecorder: NSObject, ObservableObject {
                                     } catch {
                                         Logger.shared.log("❌ Failed to save notes: \(error.localizedDescription)")
                                     }
-
+                                    
                                     // Update UI with final audio file path
                                     if FileManager.default.fileExists(atPath: finalAudioFile.path) {
                                         DispatchQueue.main.async {
                                             self.audioFileURL = finalAudioFile
                                             Logger.shared.log("🔗 audioFileURL updated to: \(finalAudioFile.path)")
                                         }
+                                    }
+                                }
+                                // Delete temporary YouTube file if it matches our known pattern
+                                if audioFile.lastPathComponent == "yt_audio.wav" {
+                                    do {
+                                        try FileManager.default.removeItem(at: audioFile)
+                                        Logger.shared.log("🗑️ Deleted temporary YouTube audio file after transcription: \(audioFile.path)")
+                                    } catch {
+                                        Logger.shared.log("❌ Failed to delete YouTube audio file after transcription: \(error.localizedDescription)")
                                     }
                                 }
                             }
@@ -346,7 +399,7 @@ class AudioRecorder: NSObject, ObservableObject {
             }
         }
     }
-
+    
     private func renameFile(from oldURL: URL, to newURL: URL) {
         do {
             // Ensure the destination directory exists
@@ -372,7 +425,7 @@ class AudioRecorder: NSObject, ObservableObject {
             Logger.shared.log("❌ Failed to rename file from \(oldURL.lastPathComponent) to \(newURL.lastPathComponent): \(error.localizedDescription)")
         }
     }
-
+    
     private func extractFirstWords(from text: String, count: Int) -> String {
         // Remove markdown headers and emphasis
         let cleanedText = text.replacingOccurrences(of: "#", with: "")
@@ -384,7 +437,7 @@ class AudioRecorder: NSObject, ObservableObject {
             .prefix(count)
         return words.joined(separator: "_")
     }
-
+    
     private func cleanFilename(from text: String) -> String {
         var cleaned = text
         // Remove special characters
@@ -396,7 +449,8 @@ class AudioRecorder: NSObject, ObservableObject {
             cleaned = String(cleaned.prefix(maxLength))
         }
         return cleaned
-    }}
+    }
+}
 
 
 

@@ -12,7 +12,7 @@ struct PromptPresets {
         PromptOption(
             name: "Standard Notes",
             prompt: """
-            I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please let the first six words in your notes be a title. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to bold important terms using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes. Also, please do not include ```markdown or ``` and use nested bullet points. Also, please include a section of potential questions that could be asked on an exam, or otherwise questions that can be asked or further research for better clarity and dont exclude any details and be very comprehensive:\n
+            I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please let the first six words in your notes be a title. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to bold important terms using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes. Also, please do not include ```markdown or ``` and use nested bullet points. Also, please include a section of potential questions that could be asked on an exam, or otherwise questions that can be asked or further research for better clarity and dont exclude any details and be very comprehensive. Please Note a key part to making good notes is to have nested bullets for your nested bullets to really nail the specificity. Also, some names or terms may be mis-interpreted in the transcription so please do your best to use context clues based on the entire topic and your current knowledge of the topic to correct the inconsistancies:\n
             """
         ),
         PromptOption(
@@ -26,25 +26,26 @@ struct PromptPresets {
             name: "Lecture Progression Tracker",
             prompt: """
             I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please let the first six words in your notes be a title. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to **bold important terms** using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes.
-
-        In addition to standard notes, focus on tracking the **progression of ideas or conversation** as they unfold. Structure this progression as a sequence of labeled stages or sections. Identify shifts in topic, speaker, or emphasis and note **how** and **why** the conversation transitions. Use a structure like:
+            If you are going to make a table, please make sure its not under a bullet point or indented.
+            In addition to standard notes, focus on tracking the **progression of ideas or conversation** as they unfold. Structure this progression as a sequence of labeled stages or sections. Identify shifts in topic, speaker, or emphasis and note **how** and **why** the conversation transitions. Also, some names or terms may be mis-interpreted in the transcription so please do your best to use context clues based on the entire topic and your current knowledge of the topic to correct the inconsistancies. Use a structure like:
 
         ### 🧭 Progression Map
 
         1. **Introduction of Topic A**  
            - Summary of what was introduced and by whom  
-           - Key subpoints or reactions  
-           - What it led into  
+               - Key subpoints or reactions  
+                    - What it led into  
 
         2. **Transition to Topic B**  
            - Trigger for transition (e.g. a question, comment, tangent)  
-           - Summary of this topic  
-           - Key shifts in tone or focus  
+               - Summary of this topic  
+                    - Key shifts in tone or focus  
 
         (...continue this way...)
 
         End your output with a **hierarchical overview path** showing the lecture’s structure in a breadcrumb-style format. Example:
-
+        
+        Please Note a key part to making good notes is to have nested bullets for your nested bullets to really nail the specificity 
         **Overview Path:**  
         Topic 1 / Subtopic A / Subtopic B / Topic 2 / Topic 3
 
