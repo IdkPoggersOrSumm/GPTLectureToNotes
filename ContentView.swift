@@ -16,96 +16,96 @@ struct WhatsNewView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            ZStack {
-                VStack(spacing: 30) {
-                    Text("Welcome to Applesauce")
-                        .font(.largeTitle)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
+            VStack(spacing: 30) {
+                Text("Welcome to Applesauce")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                    .foregroundColor(.white)
 
-                    VStack(alignment: .leading, spacing: 25) {
-                        ForEach(items) { item in
-                            HStack(alignment: .top, spacing: 15) {
-                                Image(systemName: item.icon)
-                                    .foregroundColor(.blue)
-                                    .font(.title2)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.title)
-                                        .font(.headline)
-                                        .foregroundColor(.white)
-
-                                    Text(item.subtitle)
-                                        .font(.subheadline)
-                                        .foregroundColor(.gray)
-                                        .textSelection(.enabled)
-                                        .fixedSize(horizontal: false, vertical: true)
-
-                                    if item.subtitle.contains("Paste this in Terminal:") {
-                                        Button(action: {
-                                            NSPasteboard.general.clearContents()
-                                            NSPasteboard.general.setString(item.subtitle.components(separatedBy: "Paste this in Terminal:\n").last ?? item.subtitle, forType: .string)
-                                        }) {
-                                            Image(systemName: "doc.on.doc")
-                                                .foregroundColor(.gray)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                    if item.subtitle.contains("--model") {
-                                        Button(action: {
-                                            NSPasteboard.general.clearContents()
-                                            NSPasteboard.general.setString(item.subtitle.components(separatedBy: "Command: ").last ?? item.subtitle, forType: .string)
-                                        }) {
-                                            Image(systemName: "doc.on.doc")
-                                                .foregroundColor(.gray)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                    if item.subtitle.contains("pip3") {
-                                        Button(action: {
-                                            NSPasteboard.general.clearContents()
-                                            NSPasteboard.general.setString(item.subtitle.components(separatedBy: "Command: ").last ?? item.subtitle, forType: .string)
-                                        }) {
-                                            Image(systemName: "doc.on.doc")
-                                                .foregroundColor(.gray)
-                                        }
-                                        .buttonStyle(PlainButtonStyle())
-                                    }
-                                }
-                            }
-                        }
+                VStack(alignment: .leading, spacing: 25) {
+                    ForEach(items) { item in
+                        WhatsNewItemView(item: item)
                     }
-
-                    Spacer()
-
-                    Button(action: {
-                        onContinue()
-                    })
-                    {
-                        Text("Continue")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue.opacity(0.9))
-                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .padding(.horizontal, 40)
-                    .buttonStyle(PlainButtonStyle())
                 }
-                .padding(30)
-                .background(Color(red: 28/255, green: 28/255, blue: 28/255))
-                .cornerRadius(20)
-                .shadow(radius: 10)
-                .frame(
-                    width: geometry.size.width * 0.8,
-                    height: geometry.size.height * 0.8,
-                    alignment: .center
-                )
+
+                Spacer()
+
+                Button(action: {
+                    onContinue()
+                })
+                {
+                    Text("Continue")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.blue.opacity(0.9))
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .padding(.horizontal, 40)
+                .buttonStyle(PlainButtonStyle())
             }
+            .padding(30)
+            .background(Color(red: 28/255, green: 28/255, blue: 28/255))
+            .cornerRadius(20)
+            .shadow(radius: 10)
+            .frame(
+                width: geometry.size.width * 0.8,
+                height: geometry.size.height * 0.8,
+                alignment: .center
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
     }
+
+struct WhatsNewItemView: View {
+    var item: WhatsNewItem
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 15) {
+            Image(systemName: item.icon)
+                .foregroundColor(.blue)
+                .font(.title2)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.title)
+                    .font(.headline)
+                    .foregroundColor(.white)
+
+                Text(item.subtitle)
+                    .font(.subheadline)
+                    .foregroundColor(.gray)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if item.subtitle.contains("Paste this in Terminal:") {
+                    CopyButton(text: item.subtitle.components(separatedBy: "Paste this in Terminal:\n").last ?? item.subtitle)
+                }
+                if item.subtitle.contains("--model") {
+                    CopyButton(text: item.subtitle.components(separatedBy: "Command: ").last ?? item.subtitle)
+                }
+                if item.subtitle.contains("pip3") {
+                    CopyButton(text: item.subtitle.components(separatedBy: "Command: ").last ?? item.subtitle)
+                }
+            }
+        }
+    }
+}
+
+struct CopyButton: View {
+    var text: String
+
+    var body: some View {
+        Button(action: {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        }) {
+            Image(systemName: "doc.on.doc")
+                .foregroundColor(.gray)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
 }
 
 extension String {
@@ -177,7 +177,10 @@ struct ContentView: View {
                                  subtitle: "Paste this in Terminal:\n/opt/homebrew/opt/python@3.11/bin/python3.11 -m pip install pydub"),
                     WhatsNewItem(icon: "terminal.fill",
                                  title: "Install FFmpeg",
-                                 subtitle: "Paste this in Terminal:\nbrew install ffmpeg")
+                                 subtitle: "Paste this in Terminal:\nbrew install ffmpeg"),
+                    WhatsNewItem(icon: "terminal.fill",
+                                 title: "Install yt-dlp",
+                                 subtitle: "Paste this in Terminal:\nbrew install yt-dlp")
                 ]) {
                     withAnimation {
                         showWhatsNew = false

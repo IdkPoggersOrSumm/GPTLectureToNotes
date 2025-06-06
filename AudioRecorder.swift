@@ -77,7 +77,7 @@ class AudioRecorder: NSObject, ObservableObject {
                     Logger.shared.log("🎧 Downloaded YouTube audio to: \(outputPath.path)")
                     self?.transcribeRecording(audioFile: outputPath)
                     // Schedule deletion after transcription completes
-                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 10) {
+                    /*DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 10) {
                         do {
                             try FileManager.default.removeItem(at: outputPath)
                             Logger.shared.log("🗑️ Deleted temporary YouTube audio file: \(outputPath.path)")
@@ -85,6 +85,8 @@ class AudioRecorder: NSObject, ObservableObject {
                             Logger.shared.log("❌ Failed to delete YouTube audio file: \(error.localizedDescription)")
                         }
                     }
+                    */
+                    
                 } else {
                     Logger.shared.log("❌ Failed to download YouTube audio.")
                 }
