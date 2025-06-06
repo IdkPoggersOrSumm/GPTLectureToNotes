@@ -6,6 +6,12 @@
 //
 
 import Foundation
+import os
+// Standard pricing struct for OpenAI models
+struct OpenAIModelPricing {
+    static let gpt4_1_nano: Double = 0.000002
+    static let whisper: Double = 0.0000004
+}
 
 class OpenAIClient {
     static let shared = OpenAIClient()
@@ -61,7 +67,21 @@ class OpenAIClient {
     func transcribeAudio(from audioURL: URL, completion: @escaping (String?) -> Void) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/python3") // Ensure correct Python version
-        process.arguments = [Bundle.main.path(forResource: "Transcript", ofType: "py")!, audioURL.path] // Ensure script path exists
+
+        guard let scriptPath = Bundle.main.path(forResource: "Transcript", ofType: "py") else {
+            Logger.shared.log("❌ Transcript.py not found in bundle.")
+            completion(nil)
+            return
+        }
+
+        let scriptExists = FileManager.default.fileExists(atPath: scriptPath)
+        let audioFileExists = FileManager.default.fileExists(atPath: audioURL.path)
+
+        Logger.shared.log("📍 Transcript.py path: \(scriptPath) (exists: \(scriptExists))")
+        Logger.shared.log("🎧 Audio file path: \(audioURL.path) (exists: \(audioFileExists))")
+
+        process.arguments = [scriptPath, audioURL.path]
+        Logger.shared.log("🚀 Running command: /usr/bin/python3 \(process.arguments?.joined(separator: " ") ?? "")")
 
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
@@ -70,7 +90,7 @@ class OpenAIClient {
         do {
             try process.run()
             process.waitUntilExit()
-            
+            Logger.shared.log("⚙️ Process terminated with status: \(process.terminationStatus)")
             let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
             if let output = String(data: data, encoding: .utf8) {
                 Logger.shared.log("🔍 Whisper Output: \(output)")
@@ -269,3 +289,14 @@ class OpenAIClient {
         task.resume()
     }
 }
+
+    // Estimate token count and cost from input text
+    func estimateTokenCount(for text: String) -> Int {
+        return text.count / 4 // Rough estimate: 1 token ≈ 4 characters
+    }
+
+    func estimateCost(for text: String, costPerToken: Double = OpenAIModelPricing.gpt4_1_nano) -> (tokens: Int, cost: Double) {
+        let tokenCount = estimateTokenCount(for: text)
+        let cost = Double(tokenCount) * costPerToken
+        return (tokenCount, cost)
+    }

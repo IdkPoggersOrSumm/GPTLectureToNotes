@@ -1,13 +1,20 @@
 import sys
+import os
+
+# Ensure Homebrew's site-packages are available
+sys.path.append("/opt/homebrew/lib/python3.11/site-packages")
+
+# Patch pydub detection before importing it
+os.environ["PATH"] += os.pathsep + "/opt/homebrew/bin"
+import pydub
+pydub.utils.get_encoder_name = lambda: "ffmpeg"
+
+from pydub import AudioSegment
+AudioSegment.converter = "/opt/homebrew/bin/ffmpeg"
+
 import whisper
 import shutil
 import os
-from pydub import AudioSegment
-
-AudioSegment.converter = "/opt/homebrew/bin/ffmpeg"
-
-# Explicitly set the ffmpeg path
-os.environ["PATH"] += os.pathsep + "/opt/homebrew/bin"
 
 def split_audio(audio_path, chunk_length_ms=600000):  # 10 minutes
     audio = AudioSegment.from_file(audio_path)
@@ -24,7 +31,7 @@ def transcribe_audio(audio_path):
         print(f"❌ Error: FFmpeg not found at /opt/homebrew/bin/ffmpeg. Please install it using 'brew install ffmpeg'")
         sys.exit(1)
 
-    model = whisper.load_model("tiny")  # Use a smaller model to reduce lag
+    model = whisper.load_model("small")  # Use a smaller model to reduce lag
     chunk_paths = split_audio(audio_path)
 
     print("🔊 Started Whisper transcription process.", flush=True)
@@ -36,11 +43,15 @@ def transcribe_audio(audio_path):
         print(f"✅ Transcribed chunk {idx} of {total_chunks}", flush=True)
         os.remove(path)
 
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("❌ Error: No audio file provided.")
         sys.exit(1)
 
     audio_file = sys.argv[1]
-    transcribe_audio(audio_file)
-z
+    try:
+        transcribe_audio(audio_file)
+    except Exception as e:
+        print(f"❌ Exception occurred: {e}", file=sys.stderr)
+        sys.exit(1)

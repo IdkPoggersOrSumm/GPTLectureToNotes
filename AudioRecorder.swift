@@ -76,7 +76,15 @@ class AudioRecorder: NSObject, ObservableObject {
                 if FileManager.default.fileExists(atPath: outputPath.path) {
                     Logger.shared.log("🎧 Downloaded YouTube audio to: \(outputPath.path)")
                     self?.transcribeRecording(audioFile: outputPath)
-                    // Deletion after transcription now handled in transcribeRecording
+                    // Schedule deletion after transcription completes
+                    DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 10) {
+                        do {
+                            try FileManager.default.removeItem(at: outputPath)
+                            Logger.shared.log("🗑️ Deleted temporary YouTube audio file: \(outputPath.path)")
+                        } catch {
+                            Logger.shared.log("❌ Failed to delete YouTube audio file: \(error.localizedDescription)")
+                        }
+                    }
                 } else {
                     Logger.shared.log("❌ Failed to download YouTube audio.")
                 }
@@ -373,15 +381,6 @@ class AudioRecorder: NSObject, ObservableObject {
                                             self.audioFileURL = finalAudioFile
                                             Logger.shared.log("🔗 audioFileURL updated to: \(finalAudioFile.path)")
                                         }
-                                    }
-                                }
-                                // Delete temporary YouTube file if it matches our known pattern
-                                if audioFile.lastPathComponent == "yt_audio.wav" {
-                                    do {
-                                        try FileManager.default.removeItem(at: audioFile)
-                                        Logger.shared.log("🗑️ Deleted temporary YouTube audio file after transcription: \(audioFile.path)")
-                                    } catch {
-                                        Logger.shared.log("❌ Failed to delete YouTube audio file after transcription: \(error.localizedDescription)")
                                     }
                                 }
                             }

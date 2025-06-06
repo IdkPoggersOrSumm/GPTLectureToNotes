@@ -23,7 +23,6 @@ struct HamburgerMenu: View {
     @State private var showYouTubeInput = false
     @State private var youtubeLink: String = ""
     @State private var showPDFImporter = false
-    
     @State private var transcriptionStartTime: Date? = nil
     @State private var transcriptionDuration: TimeInterval = 0
     @State private var timer: Timer? = nil
@@ -218,6 +217,14 @@ struct HamburgerMenu: View {
                         PromptSelectionView()
                     }
                     
+                    SettingsRow(title: "Open Quizlet", isSelected: false) {
+                        if let url = URL(string: "https://quizlet.com/create-set") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .icon("safari") // Optional icon
+                    .font(.system(size: 18))
+                    
               
 
                            
@@ -246,12 +253,12 @@ struct HamburgerMenu: View {
                 .padding(.bottom, 8)
                 .background(Color(red: 18/255, green: 18/255, blue: 18/255))
             
-        // MARK: Version Editor
+        // MARK: - Version Editor
             
             // Footer
             HStack {
                 Spacer()
-                Text("v2.0.0")
+                Text("v2.1.0")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -269,8 +276,7 @@ struct HamburgerMenu: View {
         }
         
     }
-    
-    // MARK: - Action Handlers
+// MARK: - Action Handlers
     
     private func formattedDuration(_ interval: TimeInterval) -> String {
         let minutes = Int(interval) / 60
