@@ -1,58 +1,104 @@
 import sys
 import os
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+# Remove HF_HUB_OFFLINE to allow model downloading when cache is cleared
+if "HF_HUB_OFFLINE" in os.environ:
+    del os.environ["HF_HUB_OFFLINE"]
+import traceback
 
-# Ensure Homebrew's site-packages are available
-sys.path.append("/opt/homebrew/lib/python3.11/site-packages")
-sys.path.append("/usr/local/lib/python3.11/site-packages")
+# 1. Standardize the environment
+HOMEBREW_SITE = "/opt/homebrew/lib/python3.11/site-packages"
+if HOMEBREW_SITE not in sys.path:
+    sys.path.append(HOMEBREW_SITE)
 
-# Patch pydub detection before importing it
 os.environ["PATH"] += os.pathsep + "/opt/homebrew/bin"
-import pydub
-pydub.utils.get_encoder_name = lambda: "ffmpeg"
 
-from pydub import AudioSegment
-AudioSegment.converter = "/opt/homebrew/bin/ffmpeg"
+def transcribe_with_mlx(audio_path):
+    if not os.path.exists(audio_path):
+        print(f"❌ MLX ERROR CODE 101: Audio file does not exist at path: {audio_path}", file=sys.stderr, flush=True)
+        return False
+    try:
+        import mlx_whisper
+        
+        # Force a local cache directory to avoid Sandbox permission issues
+        os.environ["HF_HOME"] = os.path.expanduser("~/Downloads/LectureToNotesCache/hf_cache")
+        os.makedirs(os.environ["HF_HOME"], exist_ok=True)
 
-import whisper
-import shutil
-import os
+        print("🚀 Using MLX (M4 Pro GPU Acceleration)...", file=sys.stderr, flush=True)
+        
+        # Use a model that is already downloaded or allow it to download
+        result = mlx_whisper.transcribe(
+            audio_path,
+            path_or_hf_repo="mlx-community/whisper-small-mlx-8bit",
+            language="en",
+            verbose=False  # Suppress streaming text and progress bars
+        )
+        
+        if result and 'text' in result:
+            transcript_text = result['text'].strip()
+            if transcript_text:
+                print(f"[TRANSCRIPT_START]", flush=True)
+                print(transcript_text, flush=True)
+                print(f"[TRANSCRIPT_END]", flush=True)
+                return True
+            else:
+                print("❌ MLX ERROR CODE 104: Transcription returned empty text.", file=sys.stderr, flush=True)
+                return False
+        else:
+            print("❌ MLX ERROR CODE 105: No text in result.", file=sys.stderr, flush=True)
+            return False
+    except ImportError as e:
+        print("❌ MLX ERROR CODE 102: mlx_whisper not installed in this environment.", file=sys.stderr, flush=True)
+        print(f"DETAILS: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        return False
+    except RuntimeError as e:
+        print("❌ MLX ERROR CODE 103: Runtime failure inside MLX (model load, ffmpeg, or GPU issue).", file=sys.stderr, flush=True)
+        print(f"DETAILS: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        return False
+    except Exception as e:
+        print("❌ MLX ERROR CODE 199: Unexpected MLX failure.", file=sys.stderr, flush=True)
+        print(f"DETAILS: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        return False
 
-def split_audio(audio_path, chunk_length_ms=600000):  # 10 minutes
-    audio = AudioSegment.from_file(audio_path)
-    chunks = [audio[i:i+chunk_length_ms] for i in range(0, len(audio), chunk_length_ms)]
-    chunk_paths = []
-    for idx, chunk in enumerate(chunks):
-        chunk_path = f"/tmp/chunk_{idx}.mp3"
-        chunk.export(chunk_path, format="mp3")
-        chunk_paths.append(chunk_path)
-    return chunk_paths
+def transcribe_with_faster_whisper(audio_path):
+    if not os.path.exists(audio_path):
+        print(f"❌ FW ERROR CODE 201: Audio file does not exist at path: {audio_path}", file=sys.stderr, flush=True)
+        return False
+    try:
+        from faster_whisper import WhisperModel
+        print("🏃 Falling back to Faster-Whisper (CPU)...", file=sys.stderr, flush=True)
+        
+        model = WhisperModel("small.en", device="cpu", compute_type="int8")
+        segments, info = model.transcribe(audio_path, language="en", vad_filter=True)
 
-def transcribe_audio(audio_path):
-    if not shutil.which("/opt/homebrew/bin/ffmpeg"):
-        print(f"❌ Error: FFmpeg not found at /opt/homebrew/bin/ffmpeg. Please install it using 'brew install ffmpeg'")
-        sys.exit(1)
-
-    model = whisper.load_model("small")  # Use a smaller model to reduce lag
-    chunk_paths = split_audio(audio_path)
-
-    print("🔊 Started Whisper transcription process.", flush=True)
-    total_chunks = len(chunk_paths)
-
-    for idx, path in enumerate(chunk_paths, start=1):
-        result = model.transcribe(path, fp16=False)  # Disable fp16 for better compatibility
-        print(result["text"])
-        print(f"✅ Transcribed chunk {idx} of {total_chunks}", flush=True)
-        os.remove(path)
-
+        print("[TRANSCRIPT_START]", flush=True)
+        for segment in segments:
+            print(segment.text, end="", flush=True)
+        print("\n[TRANSCRIPT_END]", flush=True)
+        return True
+    except ImportError as e:
+        print("❌ FW ERROR CODE 202: faster-whisper not installed.", file=sys.stderr, flush=True)
+        print(f"DETAILS: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        return False
+    except Exception as e:
+        print("❌ FW ERROR CODE 299: Unexpected Faster-Whisper failure.", file=sys.stderr, flush=True)
+        print(f"DETAILS: {e}", file=sys.stderr, flush=True)
+        traceback.print_exc(file=sys.stderr)
+        return False
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("❌ Error: No audio file provided.")
+        print("❌ Error: No audio file provided.", file=sys.stderr, flush=True)
         sys.exit(1)
 
     audio_file = sys.argv[1]
-    try:
-        transcribe_audio(audio_file)
-    except Exception as e:
-        print(f"❌ Exception occurred: {e}", file=sys.stderr)
-        sys.exit(1)
+    # Try the high-performance M4 Pro path first
+    if not transcribe_with_mlx(audio_file):
+        print("⚠️ MLX path failed. Attempting CPU fallback...", file=sys.stderr, flush=True)
+        if not transcribe_with_faster_whisper(audio_file):
+            print("❌ ERROR CODE 900: All transcription paths failed.", file=sys.stderr, flush=True)
+            sys.exit(2)

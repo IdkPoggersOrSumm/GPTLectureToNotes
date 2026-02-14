@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 import AppKit
 import SiriWaveView
 import MarkdownUI
@@ -123,9 +124,17 @@ extension String {
         }
     }
 }
+// MARK: - AppState ObservableObject
+class AppState: ObservableObject {
+    @Published var showInitialIntro = true
+    @Published var showWhatsNew = false
+    @Published var whispermodeldownload = false
+}
+
 // MARK: - Regular ContentView
 struct ContentView: View {
     @ObservedObject var audioRecorder = AudioRecorder.shared
+    @ObservedObject var logger = Logger.shared
     @State private var isHovering = false
     @State private var amplitude: Double = 0.5
     @State private var frequency: Double = 1.0
@@ -134,33 +143,27 @@ struct ContentView: View {
     @State private var showSettingsMenu = false
     @State private var isHoveringNotes = false
 
-    // MARK: - First Launch "What's New" State
-    @State private var showInitialIntro = true
-    @State private var showWhatsNew = false
-    @State private var whispermodeldownload = false
-    
-    
-    
-    // MARK: - Rest of Regular ContentView
+    @EnvironmentObject var appState: AppState
+
     var body: some View {
         ZStack {
             // Onboarding: Initial Intro
-            if showInitialIntro {
+            if appState.showInitialIntro {
                 WhatsNewView(items: [
                     WhatsNewItem(icon: "sparkles", title: "Welcome to Applesauce", subtitle: "I've made this app specifically so that we don't have to pay attention to every little class detail in order to pass"),
                     WhatsNewItem(icon: "waveform", title: "How it Works", subtitle: "In short, this app will have you record your lecture audio (or insert audio/text via Youtube Link or file upload) and then automatically transcribe it into a readable format, and THEN send it to OpenAI to be turned into notes"),
                     WhatsNewItem(icon: "doc.text", title: "Before we Proceed", subtitle: "Your going to have to manually download some software, but don't worry, it's not too hard! Please make sure you have AT LEAST 12GB of storage free (You absolutely will not need to use all of this storage, but its just incase) I've added the steps to download each dependancy in the following slide!")
                 ]) {
                     withAnimation {
-                        showInitialIntro = false
-                        showWhatsNew = true
+                        appState.showInitialIntro = false
+                        appState.showWhatsNew = true
                     }
                 }
                 .transition(.move(edge: .bottom))
                 .zIndex(1)
             }
             // Onboarding: Installation Instructions
-            else if showWhatsNew {
+            else if appState.showWhatsNew {
                 WhatsNewView(items: [
                     WhatsNewItem(icon: "terminal.fill",
                                  title: "Install Homebrew",
@@ -185,22 +188,21 @@ struct ContentView: View {
                                  subtitle: "Paste this in Terminal:\nbrew install yt-dlp")
                 ]) {
                     withAnimation {
-                        showWhatsNew = false
-                        whispermodeldownload = true
+                        appState.showWhatsNew = false
+                        appState.whispermodeldownload = true
                     }
                 }
                 .transition(.move(edge: .bottom))
                 .zIndex(1)
             }
-            else if whispermodeldownload {
+            else if appState.whispermodeldownload {
                 WhatsNewView(items: [
                     WhatsNewItem(icon: "apple.intelligence",
                                  title: "Download Whisper",
-                                 subtitle: "pip3 install --break-system-packages git+https://github.com/openai/whisper.git"),
-
+                                 subtitle: "/opt/homebrew/opt/python@3.11/bin/python3.11 -m pip install 'faster-whisper[metal]'"),
                 ]) {
                     withAnimation {
-                        whispermodeldownload = false
+                        appState.whispermodeldownload = false
                     }
                 }
                 .transition(.move(edge: .bottom))
@@ -361,15 +363,20 @@ struct ContentView: View {
                             // 5. THE MAGIC SPACER
                             Spacer(minLength: 0)
 
-                            // 5. Console Output
-                            Text("\(Logger.shared.consoleOutput)")
+                            // 5. Console Output - Last 2 lines only, no scroll
+                            Text(logger.consoleOutput)
                                 .font(.system(size: 10, design: .monospaced))
-                                .padding()
-                                .frame(maxWidth: .infinity, alignment: .center)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                                .padding(8)
+                                .frame(maxWidth: .infinity, maxHeight: 25)
                                 .background(Color.black.opacity(0.5))
                                 .cornerRadius(5)
+                                .textSelection(.enabled)
                                 .padding(.horizontal)
                                 .padding(.bottom, 10)
+                            .padding(.horizontal)
+                            .padding(.bottom, 10)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -384,6 +391,20 @@ struct ContentView: View {
         }
     }
 }
-#Preview {
-    ContentView()
+// MARK: - Menu Commands for disabling intro slides
+import SwiftUI
+
+struct ContentViewMenuCommands: Commands {
+    var disableIntroSlides: () -> Void
+
+    var body: some Commands {
+        CommandMenu("Slides") {
+            Button("Disable Intro Slides") {
+                disableIntroSlides()
+            }
+            .keyboardShortcut("D", modifiers: [.command, .shift])
+        }
+    }
 }
+
+// MARK: - App Entry Point

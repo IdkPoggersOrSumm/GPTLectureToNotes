@@ -17,9 +17,15 @@ class Logger: ObservableObject {  // Conforming to ObservableObject
 
     func log(_ message: String) {
         DispatchQueue.main.async {
-            self.consoleOutput = message // Update the console output
-            self.objectWillChange.send() // Notify SwiftUI to update the view
-            print(message) // Also print to Xcode console
+            self.consoleOutput += message + "\n"
+            
+            // Keep only the last 2 lines
+            let lines = self.consoleOutput.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            let lastTwoLines = lines.suffix(2).joined(separator: "\n")
+            self.consoleOutput = lastTwoLines
+            
+            self.objectWillChange.send()
+            print(message)
         }
     }
 }

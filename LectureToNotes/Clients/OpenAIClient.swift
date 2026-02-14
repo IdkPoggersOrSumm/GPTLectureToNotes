@@ -78,231 +78,104 @@ class OpenAIClient {
             completion(nil)
             return
         }
-        
+
         process.executableURL = pythonURL
         process.environment = PythonLocator.subprocessEnvironment()
-        
+
         guard let scriptPath = Bundle.main.path(forResource: "Transcript", ofType: "py") else {
             Logger.shared.log("❌ Transcript.py not found in bundle.")
             completion(nil)
             return
         }
-        
+
         let scriptExists = FileManager.default.fileExists(atPath: scriptPath)
         let audioFileExists = FileManager.default.fileExists(atPath: audioURL.path)
-        
+
         Logger.shared.log("📍 Transcript.py path: \(scriptPath) (exists: \(scriptExists))")
         Logger.shared.log("🎧 Audio file path: \(audioURL.path) (exists: \(audioFileExists))")
-        
+
         process.arguments = [scriptPath, audioURL.path]
         Logger.shared.log("🚀 Running command: \(pythonURL.path) \(process.arguments?.joined(separator: " ") ?? "")")
-        
+
         let outputPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = outputPipe
-        
+
+        var transcript = ""
+        let handle = outputPipe.fileHandleForReading
+
+        // Buffer for partial lines
+        var lineBuffer = Data()
+
+        // Use a DispatchGroup to signal completion
+        let group = DispatchGroup()
+        group.enter()
+
+        process.terminationHandler = { _ in
+            // Signal that process is done
+            group.leave()
+        }
+
+        handle.readabilityHandler = { fileHandle in
+            let data = fileHandle.availableData
+            if data.isEmpty {
+                // EOF
+                return
+            }
+            // Append to buffer
+            lineBuffer.append(data)
+            // Split into lines
+            while let range = lineBuffer.range(of: Data([UInt8(10)])) { // 10 is \n
+                let lineData = lineBuffer.subdata(in: 0..<range.lowerBound)
+                lineBuffer.removeSubrange(0...range.lowerBound)
+                if let line = String(data: lineData, encoding: .utf8) {
+                    let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if trimmed.hasPrefix("[PROGRESS]") {
+                        // Format: [PROGRESS] 67
+                        let comps = trimmed.components(separatedBy: " ")
+                        if comps.count > 1, let percent = Int(comps[1]) {
+                            Logger.shared.log("⏳ Transcription progress: \(percent)%")
+                        } else {
+                            Logger.shared.log("⏳ Transcription progress: \(trimmed)")
+                        }
+                    } else if !trimmed.isEmpty {
+                        Logger.shared.log("📝 \(trimmed)")
+                        transcript += trimmed + "\n"
+                    }
+                }
+            }
+        }
+
         do {
             try process.run()
-            process.waitUntilExit()
-            Logger.shared.log("⚙️ Process terminated with status: \(process.terminationStatus)")
-            let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                Logger.shared.log("🔍 Whisper Output: \(output)")
-                completion(output.trimmingCharacters(in: .whitespacesAndNewlines))
-            } else {
-                Logger.shared.log("❌ Whisper output was nil.")
-                completion(nil)
-            }
         } catch {
             Logger.shared.log("❌ Whisper transcription failed: \(error.localizedDescription)")
             completion(nil)
+            return
         }
-    }
-    
-    func generateStudyNotes(from audioURL: URL, completion: @escaping (String, Int, Double, String) -> Void) {
-        DispatchQueue.global(qos: .userInitiated).async {
-            self.transcribeAudio(from: audioURL) { transcription in
-                guard let transcription = transcription, !transcription.isEmpty else {
-                    DispatchQueue.main.async {
-                        AudioRecorder.shared.formattedNotes = "Error: Failed to transcribe audio"
+
+        // Wait for process to finish
+        DispatchQueue.global(qos: .utility).async {
+            group.wait()
+            handle.readabilityHandler = nil
+            // Capture any remaining data in buffer
+            if !lineBuffer.isEmpty, let lastLine = String(data: lineBuffer, encoding: .utf8) {
+                let trimmed = lastLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("[PROGRESS]") {
+                    let comps = trimmed.components(separatedBy: " ")
+                    if comps.count > 1, let percent = Int(comps[1]) {
+                        Logger.shared.log("⏳ Transcription progress: \(percent)%")
+                    } else {
+                        Logger.shared.log("⏳ Transcription progress: \(trimmed)")
                     }
-                    completion("Error: Failed to transcribe audio", 0, 0.0, "")
-                    return
+                } else if !trimmed.isEmpty {
+                    Logger.shared.log("📝 \(trimmed)")
+                    transcript += trimmed + "\n"
                 }
-                
-                guard let apiKey = self.getAPIKey() else {
-                    Logger.shared.log("❌ Error: OpenAI API Key not found.")
-                    DispatchQueue.main.async {
-                        AudioRecorder.shared.formattedNotes = "Error: API Key not found"
-                    }
-                    completion("Error: API Key not found", 0, 0.0, transcription)
-                    return
-                }
-                
-                let url = URL(string: "https://api.openai.com/v1/chat/completions")!
-                
-                let prompt = self.currentPrompt.prompt + transcription
-                
-    // MARK: - Model Type
-                let requestData: [String: Any] = [
-                    "model": "gpt-4.1-nano",
-                    "messages": [
-                        ["role": "system", "content": "Your role is to take transcripts from Lecutres and then transform them into studayble notes"],
-                        ["role": "user", "content": prompt ]
-                    ],
-                    "temperature": 0.3
-                ]
-                
-                guard let jsonData = try? JSONSerialization.data(withJSONObject: requestData) else {
-                    Logger.shared.log("❌ Error: Failed to encode JSON request.")
-                    DispatchQueue.main.async {
-                        AudioRecorder.shared.formattedNotes = "Error: Failed to encode request"
-                    }
-                    completion("Error: Failed to encode request", 0, 0.0, transcription)
-                    return
-                }
-                
-                var request = URLRequest(url: url)
-                request.httpMethod = "POST"
-                request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-                request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                request.httpBody = jsonData
-                
-                let task = URLSession.shared.dataTask(with: request) { data, response, error in
-                    if let error = error {
-                        Logger.shared.log("❌ Error: \(error.localizedDescription)")
-                        DispatchQueue.main.async {
-                            AudioRecorder.shared.formattedNotes = "Error: \(error.localizedDescription)"
-                        }
-                        completion("Error: \(error.localizedDescription)", 0, 0.0, transcription)
-                        return
-                    }
-                    
-                    guard let data = data else {
-                        Logger.shared.log("❌ Error: No data received.")
-                        DispatchQueue.main.async {
-                            AudioRecorder.shared.formattedNotes = "Error: No data received"
-                        }
-                        completion("Error: No data received", 0, 0.0, transcription)
-                        return
-                    }
-                    
-                    do {
-                        if let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-                           let choices = jsonResponse["choices"] as? [[String: Any]],
-                           let firstChoice = choices.first,
-                           let message = firstChoice["message"] as? [String: Any],
-                           let content = message["content"] as? String,
-                           let usage = jsonResponse["usage"] as? [String: Any],
-                           let promptTokens = usage["prompt_tokens"] as? Int,
-                           let completionTokens = usage["completion_tokens"] as? Int {
-
-                            let inputCost = Double(promptTokens) * OpenAIModelPricing.gpt4_1_nanoInput
-                            let outputCost = Double(completionTokens) * OpenAIModelPricing.gpt4_1_nanoOutput
-                            let estimatedCost = inputCost + outputCost
-                            let totalTokens = promptTokens + completionTokens
-
-                            Logger.shared.log("✅ AI Response (Study Notes): \(content)")
-                            Logger.shared.log(" Tokens Used: \(totalTokens)")
-                            Logger.shared.log("Estimated Cost: $\(String(format: "%.4f", estimatedCost))")
-
-                            DispatchQueue.main.async {
-                                AudioRecorder.shared.formattedNotes = content // Update the UI
-                                completion(content, totalTokens, estimatedCost, transcription)
-                            }
-                        } else {
-                            // Enhanced error handling for OpenAI response
-                            if let httpResponse = response as? HTTPURLResponse {
-                                if !(200...299).contains(httpResponse.statusCode) {
-                                    Logger.shared.log("❌ OpenAI API returned HTTP \(httpResponse.statusCode)")
-
-                                    var serverMessage = "HTTP \(httpResponse.statusCode)"
-
-                                    if let json = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any],
-                                       let errorInfo = json["error"] as? [String: Any],
-                                       let message = errorInfo["message"] as? String {
-                                        serverMessage += ": \(message)"
-                                    }
-
-                                    DispatchQueue.main.async {
-                                        AudioRecorder.shared.formattedNotes = "OpenAI API error: \(serverMessage)"
-                                    }
-
-                                    completion("OpenAI API error: \(serverMessage)", 0, 0.0, transcription)
-                                    return
-                                }
-                            }
-
-                            do {
-                                if let jsonResponse = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
-
-                                    // Check if OpenAI returned an error in JSON
-                                    if let errorInfo = jsonResponse["error"] as? [String: Any],
-                                       let message = errorInfo["message"] as? String {
-                                        Logger.shared.log("❌ OpenAI error: \(message)")
-                                        DispatchQueue.main.async {
-                                            AudioRecorder.shared.formattedNotes = "OpenAI error: \(message)"
-                                        }
-                                        completion("OpenAI error: \(message)", 0, 0.0, transcription)
-                                        return
-                                    }
-
-                                    // Extract content as before
-                                    if let choices = jsonResponse["choices"] as? [[String: Any]],
-                                       let firstChoice = choices.first,
-                                       let message = firstChoice["message"] as? [String: Any],
-                                       let content = message["content"] as? String,
-                                       let usage = jsonResponse["usage"] as? [String: Any],
-                                       let promptTokens = usage["prompt_tokens"] as? Int,
-                                       let completionTokens = usage["completion_tokens"] as? Int {
-
-                                        let inputCost = Double(promptTokens) * OpenAIModelPricing.gpt4_1_nanoInput
-                                        let outputCost = Double(completionTokens) * OpenAIModelPricing.gpt4_1_nanoOutput
-                                        let estimatedCost = inputCost + outputCost
-                                        let totalTokens = promptTokens + completionTokens
-
-                                        Logger.shared.log("✅ AI Response (Study Notes): \(content)")
-                                        Logger.shared.log(" Tokens Used: \(totalTokens)")
-                                        Logger.shared.log("Estimated Cost: $\(String(format: "%.4f", estimatedCost))")
-
-                                        DispatchQueue.main.async {
-                                            AudioRecorder.shared.formattedNotes = content
-                                            completion(content, totalTokens, estimatedCost, transcription)
-                                        }
-                                    } else {
-                                        Logger.shared.log("❌ Error: Malformed OpenAI response, could not extract content or usage")
-                                        DispatchQueue.main.async {
-                                            AudioRecorder.shared.formattedNotes = "Error: Malformed OpenAI response"
-                                        }
-                                        completion("Error: Malformed OpenAI response", 0, 0.0, transcription)
-                                    }
-
-                                } else {
-                                    Logger.shared.log("❌ Error: OpenAI response is not valid JSON")
-                                    DispatchQueue.main.async {
-                                        AudioRecorder.shared.formattedNotes = "Error: OpenAI response is not valid JSON"
-                                    }
-                                    completion("Error: OpenAI response is not valid JSON", 0, 0.0, transcription)
-                                }
-                            } catch {
-                                Logger.shared.log("❌ Error: Failed to parse JSON: \(error.localizedDescription)")
-                                DispatchQueue.main.async {
-                                    AudioRecorder.shared.formattedNotes = "Error: Failed to parse JSON"
-                                }
-                                completion("Error: Failed to parse JSON: \(error.localizedDescription)", 0, 0.0, transcription)
-                            }
-                        }
-                    } catch {
-                        Logger.shared.log("❌ Error: Failed to parse JSON: \(error.localizedDescription)")
-                        DispatchQueue.main.async {
-                            AudioRecorder.shared.formattedNotes = "Error: Failed to parse JSON"
-                        }
-                        completion("Error: Failed to parse JSON", 0, 0.0, transcription)
-                    }
-                }
-                
-                task.resume()
             }
+            Logger.shared.log("⚙️ Process terminated with status: \(process.terminationStatus)")
+            let result = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+            completion(result.isEmpty ? nil : result)
         }
     }
     
@@ -391,9 +264,7 @@ class OpenAIClient {
                         let estimatedCost = inputCost + outputCost
                         let totalTokens = promptTokens + completionTokens
 
-                        Logger.shared.log("✅ AI Response (Study Notes): \(content)")
-                        Logger.shared.log(" Tokens Used: \(totalTokens)")
-                        Logger.shared.log("Estimated Cost: $\(String(format: "%.4f", estimatedCost))")
+                        Logger.shared.log("✅ AI Response (Study Notes) generated successfully.")
 
                         completion(content, totalTokens, estimatedCost)
                     } else {

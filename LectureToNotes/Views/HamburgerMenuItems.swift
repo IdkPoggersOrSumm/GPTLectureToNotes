@@ -26,7 +26,10 @@ struct HamburgerMenu: View {
     @State private var showPDFImporter = false
     @State private var transcriptionStartTime: Date? = nil
     @State private var transcriptionDuration: TimeInterval = 0
+    @State private var processingStartTime: Date? = nil
+    @State private var processingDuration: TimeInterval = 0
     @State private var timer: Timer? = nil
+    @State private var currentPhase: String = "" // "transcribing" or "processing"
     
 
     
@@ -236,9 +239,21 @@ struct HamburgerMenu: View {
             }
             .background(Color(red: 18/255, green: 18/255, blue: 18/255))
             
-            if let startTime = transcriptionStartTime {
+            if currentPhase == "transcribing", let _ = transcriptionStartTime {
                 HStack {
                     Text("⏱️ Transcribing: \(formattedDuration(transcriptionDuration))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+                .background(Color(red: 18/255, green: 18/255, blue: 18/255))
+            }
+            
+            if currentPhase == "processing", let _ = processingStartTime {
+                HStack {
+                    Text("⏱️ Processing Notes: \(formattedDuration(processingDuration))")
                         .font(.caption)
                         .foregroundColor(.secondary)
                     Spacer()
@@ -273,7 +288,12 @@ struct HamburgerMenu: View {
             NotificationCenter.default.addObserver(forName: Notification.Name("StopTranscriptionTimer"), object: nil, queue: .main) { _ in
                 stopTranscriptionTimer()
             }
-            
+            NotificationCenter.default.addObserver(forName: Notification.Name("StopProcessingTimer"), object: nil, queue: .main) { _ in
+                stopProcessingTimer()
+            }
+        }
+        .onDisappear {
+            NotificationCenter.default.removeObserver(self)
         }
         
     }
@@ -286,20 +306,33 @@ struct HamburgerMenu: View {
     }
     
     private func startTranscriptionTimer() {
+        currentPhase = "transcribing"
         transcriptionStartTime = Date()
         transcriptionDuration = 0
+        processingStartTime = nil
+        processingDuration = 0
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            if let start = transcriptionStartTime {
+            if currentPhase == "transcribing", let start = transcriptionStartTime {
                 transcriptionDuration = Date().timeIntervalSince(start)
+            } else if currentPhase == "processing", let start = processingStartTime {
+                processingDuration = Date().timeIntervalSince(start)
             }
         }
     }
 
     private func stopTranscriptionTimer() {
+        // Switch to processing phase
+        currentPhase = "processing"
+        processingStartTime = Date()
+        processingDuration = 0
+        // Timer continues for processing phase
+    }
+    
+    private func stopProcessingTimer() {
         timer?.invalidate()
         timer = nil
-        // Do not reset transcriptionStartTime to preserve display
+        currentPhase = ""
     }
     
     private func handleAudioQualityTap() {

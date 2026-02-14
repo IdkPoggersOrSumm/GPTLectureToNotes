@@ -1,13 +1,21 @@
 import SwiftUI
+import Combine
 
 @main
-struct YourApp: App {
+struct LectureNoteMakerApp: App {
+    @StateObject var appState = AppState()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .onAppear {
-                    print("✅ App UI loaded successfully.")
-                }
+                .environmentObject(appState)
+        }
+        .commands {
+            ContentViewMenuCommands(disableIntroSlides: {
+                appState.showInitialIntro = false
+                appState.showWhatsNew = false
+                appState.whispermodeldownload = false
+            })
         }
     }
-}
+}   

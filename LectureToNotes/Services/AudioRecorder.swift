@@ -407,7 +407,7 @@ class AudioRecorder: NSObject, ObservableObject {
                         Logger.shared.log("❌ Failed to save immediate transcript: \(error.localizedDescription)")
                     }
 
-                    OpenAIClient.shared.generateStudyNotes(from: audioFile) { notes, tokens, cost, openAITranscript in
+                    OpenAIClient.shared.generateStudyNotes(from: transcription) { notes, tokens, cost in
                         DispatchQueue.main.async {
                             Logger.shared.log("✅ Notes successfully generated.")
                             self.formattedNotes = notes
@@ -435,10 +435,8 @@ class AudioRecorder: NSObject, ObservableObject {
                             let finalTranscriptFile = cacheDir.appendingPathComponent("\(baseFilename)_transcript.txt")
                             let finalNotesFile = cacheDir.appendingPathComponent("\(baseFilename)_notes.txt")
                             
-                            // Decide transcript content (prefer Whisper result, else OpenAI transcript)
-                            let transcriptContent = !transcription.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? transcription
-                                : openAITranscript
+                            // Use Whisper transcription result
+                            let transcriptContent = transcription
                             
                             DispatchQueue.global(qos: .utility).async {
                                 // Rename audio file
@@ -465,8 +463,14 @@ class AudioRecorder: NSObject, ObservableObject {
                                 if FileManager.default.fileExists(atPath: finalAudioFile.path) {
                                     DispatchQueue.main.async {
                                         self.audioFileURL = finalAudioFile
-                                        Logger.shared.log("🔗 audioFileURL updated to: \(finalAudioFile.path)")
                                     }
+                                }
+                                
+                                // Log cost info as the final message
+                                DispatchQueue.main.async {
+                                    Logger.shared.log("💰 Tokens Used: \(tokens) | Estimated Cost: $\(String(format: "%.4f", cost))")
+                                    // Post notification to stop the processing timer
+                                    NotificationCenter.default.post(name: Notification.Name("StopProcessingTimer"), object: nil)
                                 }
                             }
                         }

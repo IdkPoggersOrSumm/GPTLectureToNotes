@@ -13,7 +13,38 @@ struct PromptPresets {
         PromptOption(
             name: "Standard Notes",
             prompt: """
-            I have a transcript of a lecture, and I want you to turn it into well-structured study notes in Obsidian Markdown format. Please let the first six words in your notes be a title. Please follow these formatting rules: Use '##' headers for each major topic. Use bullet points ('-') for key points, making sure to bold important terms using 'bold text'. Use tables for comparisons and structured information with clear columns and rows. Use blockquotes ('>') for definitions or important explanations. Use emojis in section headings where appropriate for better readability. Format mathematical equations in LaTeX by wrapping them in '$$'. Add a 'Note:' section for additional insights where needed. Please apply this formatting consistently while summarizing the lecture content into clear, concise study notes. Also, please do not include ```markdown or ``` and use nested bullet points. Also, please include a section of potential questions that could be asked on an exam, or otherwise questions that can be asked or further research for better clarity and dont exclude any details and be very comprehensive. Please Note a key part to making good notes is to have nested bullets for your nested bullets to really nail the specificity. Also, some names or terms may be mis-interpreted in the transcription so please do your best to use context clues based on the entire topic and your current knowledge of the topic to correct the inconsistancies:\n
+            I have a transcript of a lecture, and I want you to turn it into well-structured, high-density study notes in Obsidian Markdown format. 
+
+            ### Title & Structure
+            1. The first six words must be the title. 
+            2. Use '##' headers for major topics and '###' for sub-topics. 
+            3. Use emojis in section headings for readability.
+            4. Use nested bullet points (and nested bullets for those) to achieve maximum specificity.
+
+            Content & Detail Level (High-Density)
+            Conceptual Depth: Do not merely list names, events, or entities; explain the "Why" behind them. Include specific origins, catalysts for change, and underlying motivations or classifications (e.g., ideological alignments, cause-and-effect chains, or theoretical frameworks).
+
+            Contextual Correction: Transcription software often fails on specialized terminology. Use context clues from the lecture and your general knowledge to correct domain-specific terms, proper nouns, and technical jargon (e.g., correcting phonetic misspellings of historical figures, scientific processes, or brand names).
+
+            Illustrative Evidence: Capture specific analogies, anecdotes, or case studies used by the speaker to clarify complex points (e.g., metaphors used to explain a concept or specific real-world examples).
+
+            The "Quantitative" Edge: Prioritize the inclusion of hard data points mentioned in the text, such as dates, statistics, percentages, population counts, or specific comparative ratings.
+
+            Specificity Requirement: For every major entity, theory, or event mentioned, provide a "Detailed Nugget" (e.g., a specific year, a primary source, or a unique defining characteristic) and an "Attitudinal Example" (e.g., a direct quote, the "tone" of a movement, or the specific stance of a researcher).
+
+            ### Formatting Toolkit
+            9. Use tables for comparisons and structured data.
+            10. Use blockquotes ('>') for definitions or critical philosophical explanations.
+            11. Bold important terms throughout.
+            12. Use LaTeX for math/science: $$formula$$.
+            13. Include a 'Note:' section for meta-commentary or additional insights.
+
+            ### Interaction & Review
+            14. Include a section for 'Potential Exam Questions' and 'Areas for Further Research.'
+            15. **CRITICAL:** Do not include ```markdown or ``` code blocks. Ensure the output is raw text.
+
+            Summary Goal: Be exhaustive. If the transcript mentions a detail, it should likely be in the notes.
+            Note: Do not include a section post-notes talking about the fact that your making notes, you should also not label your notes 'Notes on', just the title will do
             """
         ),
         PromptOption(
