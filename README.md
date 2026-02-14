@@ -2,7 +2,11 @@
 App that takes live lecture audio, turns it into transcription, and then further into notes
 
 ## DISCLAIMER
-97% of this app was generated from AI, this became more of more of a project with me seeing how much I could play with AI, while also making a semi-useful app
+97% of this app was generated from AI, this became more of more of a project with me seeing how much I could play with AI when I was still in highschool, while also making a semi-useful app.
+
+
+
+
 ## Quick Start
 
 **LectureToNotes** is now more portable! The app features:
@@ -101,28 +105,6 @@ On app launch, LectureToNotes automatically:
 3. Caches the discovered paths in `~/Library/Application Support/LectureToNotes/config.json`
 4. Falls back to manual detection if paths need to be updated
 
-### Manual Configuration
-If auto-detection fails:
-
-1. **Open Settings** (⚙️ icon in the app)
-2. Go to the **Tools** tab
-3. Click the folder icon next to each tool
-4. Select the executable manually
-5. Or use **Auto-Detect All** to retry system detection
-
-### Diagnostics
-To troubleshoot issues:
-
-1. **Open Diagnostics** from the Help menu
-2. Review:
-   - System architecture (Apple Silicon vs Intel)
-   - Detected Python and FFmpeg paths
-   - Python package versions
-   - Recommended transcription engine
-
-You can also:
-- **Copy Diagnostics** to debug messages to your clipboard
-- **Export Diagnostics** to a file for bug reports
 
 ### Transcription Engines
 
@@ -153,15 +135,6 @@ By default, cached files are stored at:
 - **Model Cache**: `~/Library/Caches/LectureToNotes/models`
 - **General Cache**: `~/Library/Caches/LectureToNotes`
 - **Config**: `~/Library/Application Support/LectureToNotes`
-
-You can customize these in **Settings** → **Directories** tab.
-
-### OpenAI Model Selection
-
-Configure which OpenAI model to use for note generation in **Settings** → **Engine** tab:
-- GPT-4o Mini (default, fastest & cheapest)
-- GPT-4
-- GPT-4o
 
 ## Troubleshooting
 
@@ -252,20 +225,6 @@ export PYTHON_311_PATH="/opt/homebrew/opt/python@3.11/bin/python3.11"
 # Or add to your shell profile (~/.zshrc or ~/.bash_profile)
 export PATH="/opt/homebrew/opt/python@3.11/bin:$PATH"
 ```
-
-## Contributing
-
-Found a portability issue? Please:
-1. Open **Diagnostics** and export the report
-2. Include the diagnostics in your bug report
-3. Mention your macOS version and architecture
-
-## Support
-
-If you encounter issues:
-1. Check the **Diagnostics** view for system information
-2. Review the **Troubleshooting** section above
-3. Export diagnostics for detailed debugging
 
 ---
 
